@@ -151,6 +151,8 @@ class MainActivity : Activity(), PlaybackService.Listener {
             findViewById(R.id.tvBrand), findViewById(R.id.clock), findViewById(R.id.dateClock)
         )
         for (v in roboViews) v.typeface = robo
+        findViewById<View>(R.id.dateClock).visibility =
+            if (resources.getBoolean(R.bool.show_date)) View.VISIBLE else View.GONE
 
         list.adapter = adapter
         list.setOnItemClickListener { _, _, pos, _ -> playFromList(pos) }
@@ -365,12 +367,14 @@ class MainActivity : Activity(), PlaybackService.Listener {
         // titolo grande, su due righe; il corpo si riduce solo se il titolo è molto lungo
         val title = t?.title ?: "Nessun brano"
         tvTitle.text = title
-        val sp = when {
-            title.length <= 14 -> 38f
-            title.length <= 26 -> 32f
-            else -> 26f
+        // dimensione base dalla risorsa dello schermo, ridotta solo se il titolo è molto lungo
+        val base = resources.getDimension(R.dimen.title_sp) / resources.displayMetrics.scaledDensity
+        val f = when {
+            title.length <= 14 -> 1.2f
+            title.length <= 26 -> 1f
+            else -> 0.8f
         }
-        tvTitle.setTextSize(TypedValue.COMPLEX_UNIT_SP, sp)
+        tvTitle.setTextSize(TypedValue.COMPLEX_UNIT_SP, base * f)
         tvArtist.text = t?.artist ?: ""
 
         eq.setActive(s.playing)

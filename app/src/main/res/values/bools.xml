@@ -1,0 +1,4 @@
+<resources>
+    <!-- Data nell'intestazione: solo su schermi più larghi -->
+    <bool name="show_date">false</bool>
+</resources>

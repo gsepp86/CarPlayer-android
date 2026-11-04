@@ -1,15 +1,15 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
-    android:layout_width="88dp"
+    android:layout_width="@dimen/strip_item"
     android:layout_height="wrap_content"
     android:gravity="center_horizontal"
     android:orientation="vertical"
-    android:padding="5dp">
+    android:padding="4dp">
 
     <ImageView
         android:id="@+id/thImg"
-        android:layout_width="72dp"
-        android:layout_height="72dp"
+        android:layout_width="@dimen/strip_thumb"
+        android:layout_height="@dimen/strip_thumb"
         android:background="@drawable/bg_thumb"
         android:clipToOutline="true"
         android:scaleType="fitCenter" />
@@ -23,5 +23,5 @@
         android:gravity="center"
         android:maxLines="1"
         android:textColor="@color/gray"
-        android:textSize="11sp" />
+        android:textSize="@dimen/strip_title_sp" />
 </LinearLayout>

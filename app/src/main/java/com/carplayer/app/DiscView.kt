@@ -35,7 +35,6 @@ class DiscView @JvmOverloads constructor(ctx: Context, attrs: AttributeSet? = nu
         strokeWidth = 2f * density
         color = 0xFF2B2E35.toInt()
     }
-    private val hole = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0xFF0A0B0D.toInt() }
     private val label = Paint(Paint.ANTI_ALIAS_FLAG)
 
     private val note = ctx.getDrawable(R.drawable.ic_note)
@@ -51,6 +50,8 @@ class DiscView @JvmOverloads constructor(ctx: Context, attrs: AttributeSet? = nu
 
     init {
         setLayerType(LAYER_TYPE_HARDWARE, null)
+        // nota scura e ben visibile sul verde del disco
+        note?.setTint(0xFF0A0C10.toInt())
     }
 
     fun setCover(b: Bitmap?) {
@@ -127,14 +128,11 @@ class DiscView @JvmOverloads constructor(ctx: Context, attrs: AttributeSet? = nu
         c.drawCircle(cx, cy, rc, label)
         if (cover == null) {
             note?.let {
-                val half = (rc * 0.35f).toInt()
+                val half = (rc * 0.62f).toInt()
                 it.setBounds((cx - half).toInt(), (cy - half).toInt(), (cx + half).toInt(), (cy + half).toInt())
                 it.draw(c)
             }
         }
         c.drawCircle(cx, cy, rc, rim)
-
-        c.drawCircle(cx, cy, r * 0.055f, hole)
-        c.drawCircle(cx, cy, r * 0.055f, rim)
     }
 }
