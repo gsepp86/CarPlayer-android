@@ -32,10 +32,17 @@
         </FrameLayout>
 
         <!-- CENTRO: titolo, cuore, barra, comandi, striscia miniature -->
-        <ScrollView
+        <LinearLayout
             android:layout_width="0dp"
             android:layout_height="match_parent"
             android:layout_weight="5"
+            android:orientation="vertical">
+
+        <!-- La parte alta scorre se lo schermo è basso; la striscia resta sempre in basso -->
+        <ScrollView
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1"
             android:fillViewport="true"
             android:scrollbars="none">
 
@@ -177,9 +184,11 @@
                         android:tint="#FFFFFF" />
                 </LinearLayout>
 
-                <include layout="@layout/strip" />
             </LinearLayout>
         </ScrollView>
+
+        <include layout="@layout/strip" />
+        </LinearLayout>
 
         <!-- DESTRA: cartella / preferiti + lista brani -->
         <LinearLayout
