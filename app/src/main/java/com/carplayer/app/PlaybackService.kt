@@ -12,6 +12,7 @@ import android.content.IntentFilter
 import android.content.pm.ServiceInfo
 import android.graphics.Bitmap
 import android.media.AudioAttributes
+import android.media.AudioFocusRequest
 import android.media.AudioManager
 import android.media.MediaMetadata
 import android.media.MediaPlayer
@@ -140,8 +141,7 @@ class PlaybackService : Service() {
     override fun onDestroy() {
         savePosition()
         try { unregisterReceiver(noisy) } catch (e: Exception) { }
-        @Suppress("DEPRECATION")
-        audio.abandonAudioFocus(focusListener)
+        abandonFocus()
         session.release()
         player.release()
         io.shutdown()
@@ -274,6 +274,7 @@ class PlaybackService : Service() {
     private fun onPrepared() {
         prepared = true
         errors = 0
+        player.setVolume(1f, 1f)
         if (pendingPos > 0) player.seekTo(pendingPos)
         if (pendingPlay) {
             if (requestFocus()) { player.start(); playing = true } else playing = false
@@ -344,10 +345,37 @@ class PlaybackService : Service() {
         }
     }
 
+    /**
+     * Su Android 8+ il focus va richiesto con gli AudioAttributes: con l'API vecchia molte
+     * autoradio concedono il focus ma non fanno uscire l'audio (silenzio con il play acceso).
+     */
+    private val focusRequest: AudioFocusRequest? by lazy {
+        if (Build.VERSION.SDK_INT >= 26) {
+            AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN)
+                .setAudioAttributes(attrs)
+                .setOnAudioFocusChangeListener(focusListener)
+                .build()
+        } else {
+            null
+        }
+    }
+
     @Suppress("DEPRECATION")
-    private fun requestFocus(): Boolean =
-        audio.requestAudioFocus(focusListener, AudioManager.STREAM_MUSIC, AudioManager.AUDIOFOCUS_GAIN) ==
-            AudioManager.AUDIOFOCUS_REQUEST_GRANTED
+    private fun requestFocus(): Boolean {
+        val req = focusRequest
+        val granted = if (req != null) {
+            audio.requestAudioFocus(req)
+        } else {
+            audio.requestAudioFocus(focusListener, AudioManager.STREAM_MUSIC, AudioManager.AUDIOFOCUS_GAIN)
+        }
+        return granted == AudioManager.AUDIOFOCUS_REQUEST_GRANTED
+    }
+
+    @Suppress("DEPRECATION")
+    private fun abandonFocus() {
+        val req = focusRequest
+        if (req != null) audio.abandonAudioFocusRequest(req) else audio.abandonAudioFocus(focusListener)
+    }
 
     private val noisy = object : BroadcastReceiver() {
         override fun onReceive(c: Context?, i: Intent?) {

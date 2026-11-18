@@ -14,6 +14,10 @@ import android.graphics.Bitmap
 import android.graphics.Color
 import android.graphics.Paint
 import android.graphics.drawable.GradientDrawable
+import android.media.AudioManager
+import android.text.SpannableStringBuilder
+import android.text.Spanned
+import android.text.style.RelativeSizeSpan
 import android.os.Build
 import android.os.Bundle
 import android.os.Handler
@@ -93,6 +97,8 @@ class MainActivity : Activity(), PlaybackService.Listener {
     private val loading = HashSet<String>()
     private val thumbExec = Executors.newSingleThreadExecutor()
     private val dp: Float get() = resources.displayMetrics.density
+    private val am by lazy { getSystemService(Context.AUDIO_SERVICE) as AudioManager }
+    private var condTypeface: android.graphics.Typeface? = null
 
     private val conn = object : ServiceConnection {
         override fun onServiceConnected(n: ComponentName?, b: IBinder?) {
@@ -151,6 +157,11 @@ class MainActivity : Activity(), PlaybackService.Listener {
             findViewById(R.id.tvBrand), findViewById(R.id.clock), findViewById(R.id.dateClock)
         )
         for (v in roboViews) v.typeface = robo
+        // schede, lista e didascalie in carattere condensato, così i nomi lunghi entrano
+        val cond = Fonts.condensed(this)
+        tabFolder.typeface = cond
+        tabFavs.typeface = cond
+        condTypeface = cond
         findViewById<View>(R.id.dateClock).visibility =
             if (resources.getBoolean(R.bool.show_date)) View.VISIBLE else View.GONE
 
@@ -288,7 +299,8 @@ class MainActivity : Activity(), PlaybackService.Listener {
         adapter.notifyDataSetChanged()
 
         val f = folder
-        tabFolder.text = if (f != null) Library.label(f) + (if (viewFavs) "" else "  ▾") else "Cartella"
+        tabFolder.text = smallCaps(if (f != null) Library.label(f) + (if (viewFavs) "" else "  ▾") else "Cartella")
+        tabFavs.text = smallCaps("♥ Preferiti")
         tabFolder.setTextColor(if (viewFavs) gray else accent)
         tabFavs.setTextColor(if (viewFavs) accent else gray)
 
@@ -378,8 +390,13 @@ class MainActivity : Activity(), PlaybackService.Listener {
         tvArtist.text = t?.artist ?: ""
 
         eq.setActive(s.playing)
-        tvStatus.text = if (t == null) "NESSUN BRANO"
-        else (if (s.playing) "IN RIPRODUZIONE" else "IN PAUSA") + "   " + (s.index + 1) + "/" + s.queue.size
+        // avviso se il volume multimediale dell'autoradio è a zero: è la causa più comune di silenzio
+        val silent = s.playing && am.getStreamVolume(AudioManager.STREAM_MUSIC) == 0
+        tvStatus.text = when {
+            t == null -> "NESSUN BRANO"
+            silent -> "VOLUME A ZERO"
+            else -> (if (s.playing) "IN RIPRODUZIONE" else "IN PAUSA") + "   " + (s.index + 1) + "/" + s.queue.size
+        }
 
         btnPlay.setImageResource(if (s.playing) R.drawable.ic_pause else R.drawable.ic_play)
         disc.setSpinning(s.playing)
@@ -453,7 +470,10 @@ class MainActivity : Activity(), PlaybackService.Listener {
         wanted = (stripFrom until stripTo).map { q[it].path }.toHashSet()
         for (i in stripFrom until stripTo) {
             val v = layoutInflater.inflate(R.layout.item_thumb, stripBox, false)
-            v.findViewById<TextView>(R.id.thTitle).text = q[i].title
+            v.findViewById<TextView>(R.id.thTitle).apply {
+                text = q[i].title
+                typeface = condTypeface
+            }
             v.setOnClickListener {
                 stripTouchAt = 0L
                 svc?.playIndex(i)
@@ -561,6 +581,19 @@ class MainActivity : Activity(), PlaybackService.Listener {
         )
     }
 
+    /** Maiuscoletto: le minuscole diventano maiuscole piccole, le maiuscole restano grandi. */
+    private fun smallCaps(s: String): CharSequence {
+        val sb = SpannableStringBuilder()
+        for (ch in s) {
+            val start = sb.length
+            sb.append(ch.uppercaseChar())
+            if (ch.isLowerCase()) {
+                sb.setSpan(RelativeSizeSpan(0.75f), start, sb.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+            }
+        }
+        return sb
+    }
+
     private fun fmt(ms: Int): String {
         val s = ms / 1000
         return "%d:%02d".format(s / 60, s % 60)
@@ -576,13 +609,17 @@ class MainActivity : Activity(), PlaybackService.Listener {
             val t = shown[position]
             val cur = svc?.current?.path == t.path
             v.findViewById<TextView>(R.id.itTitle).apply {
-                text = t.title
+                text = smallCaps(t.title)
                 setTextColor(if (cur) accent else white)
                 // il brano in esecuzione è sottolineato
                 paintFlags = if (cur) paintFlags or Paint.UNDERLINE_TEXT_FLAG
                 else paintFlags and Paint.UNDERLINE_TEXT_FLAG.inv()
             }
-            v.findViewById<TextView>(R.id.itArtist).text = t.artist
+            v.findViewById<TextView>(R.id.itTitle).typeface = condTypeface
+            v.findViewById<TextView>(R.id.itArtist).apply {
+                text = t.artist
+                typeface = condTypeface
+            }
             v.findViewById<ImageView>(R.id.itFav).visibility =
                 if (t.path in favSet) View.VISIBLE else View.GONE
             v.setBackgroundColor(if (cur) 0x223DDC97 else 0)
