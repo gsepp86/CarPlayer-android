@@ -91,6 +91,7 @@ class PlaybackService : Service() {
         super.onCreate()
         audio = getSystemService(Context.AUDIO_SERVICE) as AudioManager
         route = AudioRoute(this)
+        route.manualSink = Prefs.int(this, "outSink")
         nm = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         shuffle = Prefs.bool(this, "shuffle")
         repeat = Prefs.int(this, "repeat")
@@ -169,10 +170,12 @@ class PlaybackService : Service() {
             pendingPlay = true
             playing = true
         } else {
-            if (!requestFocus()) return
+            // il focus è best-effort: su molte autoradio viene negato (radio FM o app
+            // di sistema che lo tengono) ma la musica deve partire lo stesso
+            requestFocus()
             route.apply()
-            player.start()
-            playing = true
+            ensureAudible()
+            playing = startPlayer()
         }
         resumeOnFocus = false
         pushState()
@@ -235,6 +238,16 @@ class PlaybackService : Service() {
         if (prepared) { player.seekTo(ms); pushState() } else pendingPos = ms
     }
 
+    /**
+     * Cambia a mano l'uscita audio (tocco sullo stato in alto): serve sulle autoradio
+     * che continuano a mandare la musica sulla rotta sbagliata.
+     */
+    fun cycleOutput(): String {
+        val label = route.cycleSink()
+        Prefs.putInt(this, "outSink", route.manualSink)
+        return label
+    }
+
     fun toggleShuffle() {
         shuffle = !shuffle
         upcoming = -1
@@ -285,11 +298,10 @@ class PlaybackService : Service() {
         player.setVolume(1f, 1f)
         if (pendingPos > 0) player.seekTo(pendingPos)
         if (pendingPlay) {
-            if (requestFocus()) {
-                route.apply()
-                player.start()
-                playing = true
-            } else playing = false
+            requestFocus()
+            route.apply()
+            ensureAudible()
+            playing = startPlayer()
         } else {
             playing = false
         }
@@ -370,6 +382,31 @@ class PlaybackService : Service() {
         } else {
             null
         }
+    }
+
+    /** Avvia la riproduzione; se l'HAL rifiuta il brano resta in pausa invece di crashare. */
+    private fun startPlayer(): Boolean = try {
+        player.start()
+        true
+    } catch (e: Exception) {
+        false
+    }
+
+    /**
+     * Alcune autoradio tengono il canale multimediale mutato o a volume zero: senza
+     * questo il play va avanti ma non esce un suono. Si alza solo se serve.
+     */
+    @Suppress("DEPRECATION")
+    private fun ensureAudible() {
+        try {
+            if (audio.isStreamMute(AudioManager.STREAM_MUSIC)) {
+                audio.adjustStreamVolume(AudioManager.STREAM_MUSIC, AudioManager.ADJUST_UNMUTE, 0)
+            }
+            if (audio.getStreamVolume(AudioManager.STREAM_MUSIC) <= 0) {
+                val max = audio.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
+                audio.setStreamVolume(AudioManager.STREAM_MUSIC, (max * 7) / 10, 0)
+            }
+        } catch (e: Exception) { }
     }
 
     @Suppress("DEPRECATION")

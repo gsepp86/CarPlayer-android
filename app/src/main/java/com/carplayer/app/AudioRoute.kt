@@ -40,6 +40,12 @@ class AudioRoute(context: Context) {
     var onBuiltInSpeaker = false
         private set
 
+    /**
+     * Uscita scelta a mano: [AUTO] = decide l'app, altrimenti l'id di un AudioDeviceInfo.
+     * Serve sulle autoradio che instradano male: toccando lo stato in alto si cambia.
+     */
+    var manualSink = AUTO
+
     private val devices: AudioDeviceCallback? =
         if (Build.VERSION.SDK_INT >= 23) object : AudioDeviceCallback() {
             override fun onAudioDevicesAdded(addedDevices: Array<out AudioDeviceInfo>?) {
@@ -82,16 +88,63 @@ class AudioRoute(context: Context) {
 
     // ---------------------------------------------------------------- interno
 
-    /** Manda la traccia sulle casse interne (o torna al routing di sistema se serve). */
+    /**
+     * Manda la traccia sulle casse interne (o torna al routing di sistema se serve).
+     * Se l'HAL non accetta il dispositivo preferito si prova anche la via "storica"
+     * delle autoradio RK: speakerphone acceso con modalità normale.
+     */
+    @Suppress("DEPRECATION")
     private fun routeToSink() {
         val p = player ?: return
         val sink = preferredSink()
         val accepted = try {
-            if (Build.VERSION.SDK_INT >= 28) p.setPreferredDevice(sink) else true
+            if (Build.VERSION.SDK_INT >= 28 && sink != null) p.setPreferredDevice(sink) else true
         } catch (e: Exception) {
             false
         }
-        onBuiltInSpeaker = sink != null && accepted
+        onBuiltInSpeaker = sink != null && accepted && !isExternal(sink.type)
+        try {
+            if (sink != null && !accepted) am.isSpeakerphoneOn = true
+            else if (sink == null) am.isSpeakerphoneOn = false
+        } catch (e: Exception) { }
+    }
+
+    /** Uscite disponibili: solo i sink, cioè i dispositivi su cui si può mandare l'audio. */
+    fun outputs(): List<AudioDeviceInfo> {
+        if (Build.VERSION.SDK_INT < 23) return emptyList()
+        return try {
+            am.getDevices(AudioManager.GET_DEVICES_OUTPUTS)?.filter { it.isSink } ?: emptyList()
+        } catch (e: Exception) {
+            emptyList()
+        }
+    }
+
+    /** Passa all'uscita successiva: Automatico, poi ogni dispositivo, poi di nuovo Automatico. */
+    fun cycleSink(): String {
+        val outs = outputs()
+        val ids = ArrayList<Int>(outs.size + 1)
+        ids.add(AUTO)
+        for (d in outs) ids.add(d.id)
+        val i = ids.indexOf(manualSink)
+        manualSink = ids[if (i < 0) 0 else (i + 1) % ids.size]
+        routeToSink()
+        if (manualSink == AUTO) return "Automatico"
+        return outs.firstOrNull { it.id == manualSink }?.let { label(it) } ?: "Automatico"
+    }
+
+    private fun label(d: AudioDeviceInfo): String {
+        val n = d.productName?.toString()?.trim().orEmpty()
+        if (n.isNotEmpty() && n != "null") return n
+        return when (d.type) {
+            AudioDeviceInfo.TYPE_BUILTIN_SPEAKER -> "Cassa interna"
+            AudioDeviceInfo.TYPE_BUILTIN_EARPIECE -> "Capsula"
+            AudioDeviceInfo.TYPE_BLUETOOTH_A2DP -> "Bluetooth"
+            AudioDeviceInfo.TYPE_USB_DEVICE, AudioDeviceInfo.TYPE_USB_HEADSET -> "USB"
+            AudioDeviceInfo.TYPE_WIRED_HEADPHONES, AudioDeviceInfo.TYPE_WIRED_HEADSET -> "Cuffie"
+            AudioDeviceInfo.TYPE_HDMI, AudioDeviceInfo.TYPE_HDMI_ARC,
+            AudioDeviceInfo.TYPE_HDMI_EARC -> "HDMI"
+            else -> "Uscita " + d.type
+        }
     }
 
     /**
@@ -123,14 +176,15 @@ class AudioRoute(context: Context) {
      */
     private fun preferredSink(): AudioDeviceInfo? {
         if (Build.VERSION.SDK_INT < 23) return null
-        val outs = try {
-            am.getDevices(AudioManager.GET_DEVICES_OUTPUTS)
-        } catch (e: Exception) {
-            null
-        } ?: return null
-        if (outs.any { it.isSink && isExternal(it.type) }) return null
-        return outs.firstOrNull { it.isSink && it.type == AudioDeviceInfo.TYPE_BUILTIN_SPEAKER }
-            ?: outs.firstOrNull { it.isSink && !isPhoneRoute(it.type) }
+        val outs = outputs()
+        if (manualSink > 0) {
+            val chosen = outs.firstOrNull { it.id == manualSink }
+            if (chosen != null) return chosen
+            manualSink = AUTO // non più disponibile: torna automatico
+        }
+        if (outs.any { isExternal(it.type) }) return null
+        return outs.firstOrNull { it.type == AudioDeviceInfo.TYPE_BUILTIN_SPEAKER }
+            ?: outs.firstOrNull { !isPhoneRoute(it.type) }
     }
 
     private fun isPhoneRoute(t: Int) = t == AudioDeviceInfo.TYPE_BLUETOOTH_A2DP ||
@@ -153,5 +207,10 @@ class AudioRoute(context: Context) {
         AudioDeviceInfo.TYPE_DOCK,
         AudioDeviceInfo.TYPE_DOCK_ANALOG -> true
         else -> false
+    }
+
+    companion object {
+        /** Nessuna scelta a mano: l'app preferisce le casse interne. */
+        const val AUTO = 0
     }
 }

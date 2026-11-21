@@ -179,6 +179,13 @@ class MainActivity : Activity(), PlaybackService.Listener {
         tabFavs.setOnClickListener { setView(true) }
         tabFolder.setOnClickListener { if (viewFavs) setView(false) else chooseFolder() }
         tvEmpty.setOnClickListener { if (library.isEmpty()) ensurePermission() }
+        // tocco sullo stato in alto: cambia l'uscita audio (se la radio instrada male)
+        tvStatus.setOnClickListener {
+            val s = svc ?: return@setOnClickListener
+            android.widget.Toast.makeText(
+                this, "Uscita: " + s.cycleOutput(), android.widget.Toast.LENGTH_SHORT
+            ).show()
+        }
 
         seek.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
             override fun onProgressChanged(sb: SeekBar?, p: Int, fromUser: Boolean) {

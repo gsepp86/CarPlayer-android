@@ -22,6 +22,6 @@
         android:ellipsize="end"
         android:gravity="center"
         android:maxLines="1"
-        android:textColor="@color/gray"
+        android:textColor="@color/text_soft"
         android:textSize="@dimen/strip_title_sp" />
 </LinearLayout>
