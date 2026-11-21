@@ -13,6 +13,7 @@ Lettore musicale leggero per autoradio Android (e telefoni). Nessuna libreria es
 - Continua a suonare in background (navigatore aperto), tasti del volante/Bluetooth, notifica con comandi.
 - Ricorda ultimo brano, posizione, cartella, shuffle/ripeti e preferiti.
 - Pausa automatica se si scollega l'audio, abbassa il volume per gli avvisi del navigatore.
+- **Uscita audio scelta dall'app**: la musica va sulle casse dell'auto anche con il Bluetooth acceso e nessun dispositivo collegato, quindi in tendina non finisce più sulla rotta "Altoparlante telefono" con il play acceso e le casse mute. Se colleghi cuffie, USB o un Bluetooth, l'audio torna lì da solo.
 
 ## Come ottenere l'APK
 **Android Studio (più semplice):** File > Open > scegli questa cartella, attendi la sincronizzazione, poi

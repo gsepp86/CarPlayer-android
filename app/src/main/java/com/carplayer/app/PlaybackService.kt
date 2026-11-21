@@ -66,6 +66,7 @@ class PlaybackService : Service() {
     private lateinit var player: MediaPlayer
     private lateinit var session: MediaSession
     private lateinit var audio: AudioManager
+    private lateinit var route: AudioRoute
     private lateinit var nm: NotificationManager
     private var prepared = false
     private var pendingPlay = false
@@ -89,6 +90,7 @@ class PlaybackService : Service() {
     override fun onCreate() {
         super.onCreate()
         audio = getSystemService(Context.AUDIO_SERVICE) as AudioManager
+        route = AudioRoute(this)
         nm = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         shuffle = Prefs.bool(this, "shuffle")
         repeat = Prefs.int(this, "repeat")
@@ -100,6 +102,9 @@ class PlaybackService : Service() {
         }
 
         session = MediaSession(this, "CarPlayer")
+        // riproduzione locale su STREAM_MUSIC: la tendina non aggancia più una rotta
+        // Bluetooth/telefonica quando la musica esce dalle casse dell'auto
+        if (Build.VERSION.SDK_INT >= 34) session.setPlaybackToLocal(attrs)
         @Suppress("DEPRECATION")
         session.setFlags(
             MediaSession.FLAG_HANDLES_MEDIA_BUTTONS or MediaSession.FLAG_HANDLES_TRANSPORT_CONTROLS
@@ -142,6 +147,7 @@ class PlaybackService : Service() {
         savePosition()
         try { unregisterReceiver(noisy) } catch (e: Exception) { }
         abandonFocus()
+        route.release()
         session.release()
         player.release()
         io.shutdown()
@@ -164,6 +170,7 @@ class PlaybackService : Service() {
             playing = true
         } else {
             if (!requestFocus()) return
+            route.apply()
             player.start()
             playing = true
         }
@@ -258,6 +265,7 @@ class PlaybackService : Service() {
         try {
             player.reset()
             player.setAudioAttributes(attrs)
+            route.attach(player)
             player.setWakeMode(this, PowerManager.PARTIAL_WAKE_LOCK)
             player.setDataSource(t.path)
             player.prepareAsync()
@@ -277,7 +285,11 @@ class PlaybackService : Service() {
         player.setVolume(1f, 1f)
         if (pendingPos > 0) player.seekTo(pendingPos)
         if (pendingPlay) {
-            if (requestFocus()) { player.start(); playing = true } else playing = false
+            if (requestFocus()) {
+                route.apply()
+                player.start()
+                playing = true
+            } else playing = false
         } else {
             playing = false
         }
@@ -379,7 +391,12 @@ class PlaybackService : Service() {
 
     private val noisy = object : BroadcastReceiver() {
         override fun onReceive(c: Context?, i: Intent?) {
-            if (i?.action == AudioManager.ACTION_AUDIO_BECOMING_NOISY) pause()
+            if (i?.action != AudioManager.ACTION_AUDIO_BECOMING_NOISY) return
+            // Se la musica sta già uscendo dalle casse dell'auto non si è scollegato
+            // niente: l'avviso arriva anche quando la radio spegne il Bluetooth, e la
+            // traccia non deve andare in pausa.
+            if (route.onBuiltInSpeaker) return
+            pause()
         }
     }
 
