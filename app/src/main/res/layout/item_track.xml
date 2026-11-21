@@ -16,22 +16,29 @@
         android:layout_weight="1"
         android:orientation="vertical">
 
+        <!-- titolo: scorre da solo se il brano ha un nome lungo -->
         <TextView
             android:id="@+id/itTitle"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:ellipsize="end"
-            android:maxLines="1"
+            android:ellipsize="marquee"
+            android:marqueeRepeatLimit="marquee_forever"
+            android:scrollHorizontally="true"
+            android:singleLine="true"
             android:textColor="#FFFFFF"
             android:textSize="@dimen/row_title_sp" />
 
+        <!-- autore: più grande e più chiaro, scorre anche lui se serve -->
         <TextView
             android:id="@+id/itArtist"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:ellipsize="end"
-            android:maxLines="1"
-            android:textColor="@color/gray"
+            android:layout_marginTop="1dp"
+            android:ellipsize="marquee"
+            android:marqueeRepeatLimit="marquee_forever"
+            android:scrollHorizontally="true"
+            android:singleLine="true"
+            android:textColor="@color/text_soft"
             android:textSize="@dimen/row_artist_sp" />
     </LinearLayout>
 

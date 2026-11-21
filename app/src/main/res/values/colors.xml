@@ -2,4 +2,6 @@
     <color name="bg">#0A0C10</color>
     <color name="accent">#3DDC97</color>
     <color name="gray">#9AA3AF</color>
+    <!-- testo secondario della lista: più chiaro del grigio, si legge da lontano -->
+    <color name="text_soft">#D4DBE5</color>
 </resources>

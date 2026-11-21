@@ -614,11 +614,14 @@ class MainActivity : Activity(), PlaybackService.Listener {
                 // il brano in esecuzione è sottolineato
                 paintFlags = if (cur) paintFlags or Paint.UNDERLINE_TEXT_FLAG
                 else paintFlags and Paint.UNDERLINE_TEXT_FLAG.inv()
+                typeface = condTypeface
+                // selected = testo che scorre quando non entra nella riga
+                isSelected = true
             }
-            v.findViewById<TextView>(R.id.itTitle).typeface = condTypeface
             v.findViewById<TextView>(R.id.itArtist).apply {
                 text = t.artist
                 typeface = condTypeface
+                isSelected = true
             }
             v.findViewById<ImageView>(R.id.itFav).visibility =
                 if (t.path in favSet) View.VISIBLE else View.GONE

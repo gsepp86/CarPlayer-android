@@ -26,8 +26,8 @@
     <dimen name="strip_title_sp">13sp</dimen>
     <dimen name="tab_h">60dp</dimen>
     <dimen name="tab_sp">21sp</dimen>
-    <dimen name="row_title_sp">25sp</dimen>
-    <dimen name="row_artist_sp">18sp</dimen>
-    <dimen name="row_min_h">72dp</dimen>
+    <dimen name="row_title_sp">30sp</dimen>
+    <dimen name="row_artist_sp">21sp</dimen>
+    <dimen name="row_min_h">84dp</dimen>
     <dimen name="gap">10dp</dimen>
 </resources>
