@@ -328,10 +328,16 @@ class MainActivity : Activity(), PlaybackService.Listener {
         if (i >= 0) list.setSelection(i)
     }
 
+    /** Tocco sulla lista: il brano parte subito, senza dover premere play. */
     private fun playFromList(pos: Int) {
         val s = svc ?: return
         val t = shown.getOrNull(pos) ?: return
-        if (s.current?.path == t.path) s.togglePlay() else s.setQueue(shown, pos, true)
+        if (s.current?.path == t.path) {
+            // riga già caricata (magari in pausa): riprende a suonare, non mette in pausa
+            if (!s.playing) s.play()
+        } else {
+            s.setQueue(shown, pos, true)
+        }
     }
 
     private fun setView(favs: Boolean) {
