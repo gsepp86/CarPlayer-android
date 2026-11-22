@@ -11,7 +11,7 @@
     <dimen name="date_sp">12sp</dimen>
     <dimen name="title_sp">26sp</dimen>
     <dimen name="artist_sp">15sp</dimen>
-    <dimen name="heart">40dp</dimen>
+    <dimen name="heart">46dp</dimen>
     <dimen name="ctl_side">38dp</dimen>
     <dimen name="ctl_mid">48dp</dimen>
     <dimen name="play">68dp</dimen>
@@ -31,6 +31,7 @@
     <dimen name="row_artist_sp">23sp</dimen>
     <dimen name="row_min_h">84dp</dimen>
     <dimen name="gap">5dp</dimen>
+    <dimen name="ctl_gap">7dp</dimen>
     <dimen name="gear">32dp</dimen>
     <dimen name="handle_w">22dp</dimen>
 </resources>

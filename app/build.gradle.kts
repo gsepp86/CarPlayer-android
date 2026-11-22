@@ -11,8 +11,17 @@ android {
         applicationId = "com.carplayer.app"
         minSdk = 21
         targetSdk = 34
-        versionCode = 15
-        versionName = "2.4"
+        versionCode = 16
+        versionName = "2.5"
+    }
+
+    signingConfigs {
+        create("release") {
+            storeFile = file("carplayer.jks")
+            storePassword = "carplayer"
+            keyAlias = "carplayer"
+            keyPassword = "carplayer"
+        }
     }
 
     buildTypes {
@@ -20,8 +29,7 @@ android {
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"))
-            // firmato con la chiave di debug: l'APK si installa subito, senza keystore
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = signingConfigs.getByName("release")
         }
     }
 
