@@ -80,6 +80,9 @@ class PlaybackService : Service() {
     private var isForeground = false
     private var coverToken = 0
     private var upcoming = -1
+    /** Volume abbassato mentre un'altra app (WhatsApp, navigatore, chiamata) sta suonando. */
+    private var ducked = false
+    private var duckToken = 0
     private val history = ArrayList<Int>()
     private val main = Handler(Looper.getMainLooper())
     private val io = Executors.newSingleThreadExecutor()
@@ -177,7 +180,7 @@ class PlaybackService : Service() {
         // di sistema che lo tengono) ma la musica deve partire lo stesso
         requestFocus()
         ensureAudible()
-        engine?.setVolume(1f)
+        applyVolume()
         playing = engine?.start() ?: false
         if (!playing) lastError = "Avvio rifiutato dal motore"
         pushState()
@@ -341,7 +344,7 @@ class PlaybackService : Service() {
             engine = n
             e = n
         }
-        e.setVolume(1f)
+        e.setVolume(volumeNow())
         route.chosen()?.let { e.setPreferredDevice(it) }
         try {
             e.load(source, startMs)
@@ -355,7 +358,7 @@ class PlaybackService : Service() {
         loading = false
         errors = 0
         lastError = ""
-        engine?.setVolume(1f)
+        applyVolume()
         if (pendingPos > 0) engine?.seekTo(pendingPos)
         if (pendingPlay) {
             requestFocus()
@@ -446,13 +449,35 @@ class PlaybackService : Service() {
      * Su queste autoradio il focus viene revocato appena parte la musica (radio FM o
      * app di sistema che lo tengono): reagire mettendo in pausa faceva fermare il brano
      * un istante dopo il tocco, e sembrava che la traccia fosse solo selezionata.
-     * Quindi la musica non si ferma mai per il focus: al massimo si abbassa il volume
-     * durante gli avvisi del navigatore.
+     * Quindi la musica non si ferma mai per il focus: si abbassa soltanto il volume
+     * (ducking) quando parla un'altra fonte, per esempio un vocale di WhatsApp o il
+     * navigatore, e si riporta a piena voce quando l'altra fonte ha finito.
      */
     private val focusListener = AudioManager.OnAudioFocusChangeListener { change ->
         when (change) {
-            AudioManager.AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK -> engine?.setVolume(0.25f)
-            AudioManager.AUDIOFOCUS_GAIN -> engine?.setVolume(1f)
+            AudioManager.AUDIOFOCUS_LOSS,
+            AudioManager.AUDIOFOCUS_LOSS_TRANSIENT,
+            AudioManager.AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK -> duck(true)
+            AudioManager.AUDIOFOCUS_GAIN -> duck(false)
+        }
+    }
+
+    private fun volumeNow(): Float = if (ducked) DUCK_VOLUME else 1f
+
+    private fun applyVolume() {
+        engine?.setVolume(volumeNow())
+    }
+
+    /** Abbassa o rialza la musica con una piccola rampa, senza mai metterla in pausa. */
+    private fun duck(on: Boolean) {
+        if (on == ducked) return
+        ducked = on
+        val token = ++duckToken
+        val target = volumeNow()
+        for (i in 1..6) {
+            main.postDelayed({
+                if (token == duckToken) engine?.setVolume(target * i / 6f)
+            }, i * 35L)
         }
     }
 
@@ -606,5 +631,10 @@ class PlaybackService : Service() {
         const val ACTION_TOGGLE = "com.carplayer.app.TOGGLE"
         const val ACTION_NEXT = "com.carplayer.app.NEXT"
         const val ACTION_PREV = "com.carplayer.app.PREV"
+
+        /** Volume della musica mentre parla un'altra fonte (WhatsApp, navigatore…). */
+        private const val DUCK_VOLUME = 0.18f
+        /** Attesa prima di rialzare, così i suoni brevi non fanno "pompare" il volume. */
+        private const val DUCK_HOLD_MS = 900L
     }
 }
