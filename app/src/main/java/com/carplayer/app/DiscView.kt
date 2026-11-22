@@ -32,8 +32,8 @@ class DiscView @JvmOverloads constructor(ctx: Context, attrs: AttributeSet? = nu
     }
     private val rim = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.STROKE
-        strokeWidth = 2f * density
-        color = 0xFF2B2E35.toInt()
+        strokeWidth = 3.5f * density
+        color = 0xFF6B7280.toInt()
     }
     private val label = Paint(Paint.ANTI_ALIAS_FLAG)
     private var accent = 0xFF3DDC97.toInt()
