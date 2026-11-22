@@ -18,7 +18,10 @@ import android.graphics.drawable.ClipDrawable
 import android.graphics.drawable.Drawable
 import android.graphics.drawable.GradientDrawable
 import android.graphics.drawable.LayerDrawable
+import android.media.AudioAttributes
+import android.media.AudioFormat
 import android.media.AudioManager
+import android.media.AudioTrack
 import android.text.SpannableStringBuilder
 import android.text.Spanned
 import android.text.style.RelativeSizeSpan
@@ -42,8 +45,10 @@ import android.widget.ListView
 import android.widget.SeekBar
 import android.widget.TextView
 import java.util.concurrent.Executors
+import kotlin.math.PI
 import kotlin.math.abs
 import kotlin.math.min
+import kotlin.math.sin
 
 class MainActivity : Activity(), PlaybackService.Listener {
 
@@ -598,6 +603,8 @@ class MainActivity : Activity(), PlaybackService.Listener {
         val accentPalette = v.findViewById<LinearLayout>(R.id.accentPalette)
         val bgPalette = v.findViewById<LinearLayout>(R.id.bgPalette)
         val outBox = v.findViewById<LinearLayout>(R.id.outputBox)
+        val engineBox = v.findViewById<LinearLayout>(R.id.engineBox)
+        val diag = v.findViewById<TextView>(R.id.audioDiag)
 
         val dlg = AlertDialog.Builder(this, android.R.style.Theme_Material_Dialog_Alert)
             .setView(v)
@@ -642,13 +649,108 @@ class MainActivity : Activity(), PlaybackService.Listener {
             }
         }
 
+        fun paintDiag() {
+            val s = svc
+            val vol = am.getStreamVolume(AudioManager.STREAM_MUSIC)
+            val max = am.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
+            val mode = when (am.mode) {
+                AudioManager.MODE_IN_CALL -> "chiamata"
+                AudioManager.MODE_IN_COMMUNICATION -> "comunicazione"
+                AudioManager.MODE_RINGTONE -> "suoneria"
+                else -> "normale"
+            }
+            val eng = when (s?.engineMode ?: 0) {
+                PlaybackService.ENGINE_MP -> "MediaPlayer"
+                PlaybackService.ENGINE_PCM -> "PCM"
+                else -> "auto"
+            }
+            val err = s?.lastError?.takeIf { it.isNotBlank() }
+            diag.text = "Volume $vol/$max · modo $mode · motore $eng\n" +
+                (if (err != null) "Ultimo errore: $err" else "Nessun errore del motore")
+        }
+
+        fun paintEngine() {
+            engineBox.removeAllViews()
+            val cur = svc?.engineMode ?: PlaybackService.ENGINE_AUTO
+            val opts = listOf(
+                PlaybackService.ENGINE_AUTO to "Automatico (PCM, consigliato)",
+                PlaybackService.ENGINE_MP to "MediaPlayer",
+                PlaybackService.ENGINE_PCM to "PCM forzato"
+            )
+            for ((id, name) in opts) {
+                val tv = TextView(this)
+                tv.text = (if (id == cur) "●  " else "○  ") + name
+                tv.setTextColor(if (id == cur) accent else gray)
+                tv.setTextSize(TypedValue.COMPLEX_UNIT_SP, 16f)
+                tv.typeface = listFont
+                tv.setPadding(0, (8 * dp).toInt(), 0, (8 * dp).toInt())
+                tv.setOnClickListener {
+                    svc?.setEngine(id)
+                    paintEngine()
+                    paintDiag()
+                }
+                engineBox.addView(tv)
+            }
+        }
+
         paintPalettes()
         paintOutputs()
+        paintEngine()
+        paintDiag()
+        v.findViewById<TextView>(R.id.btnTest).setOnClickListener {
+            playTestTone()
+            diag.postDelayed({ paintDiag() }, 300)
+        }
         dlg.setOnShowListener {
             val w = (resources.displayMetrics.widthPixels * 0.55f).toInt()
             dlg.window?.setLayout(w, ViewGroup.LayoutParams.WRAP_CONTENT)
         }
         dlg.show()
+    }
+
+    /** Tono di 1,5 s su AudioTrack: dice subito se l'uscita audio funziona. */
+    private fun playTestTone() {
+        if (Build.VERSION.SDK_INT < 23) return
+        Thread {
+            var at: AudioTrack? = null
+            try {
+                val rate = 44100
+                val frames = rate * 3 / 2
+                val buf = ShortArray(frames * 2)
+                for (i in 0 until frames) {
+                    val v = (sin(2.0 * PI * 440.0 * i / rate) * 11000).toInt().toShort()
+                    buf[i * 2] = v
+                    buf[i * 2 + 1] = v
+                }
+                val min = AudioTrack.getMinBufferSize(
+                    rate, AudioFormat.CHANNEL_OUT_STEREO, AudioFormat.ENCODING_PCM_16BIT
+                )
+                at = AudioTrack.Builder()
+                    .setAudioAttributes(
+                        AudioAttributes.Builder()
+                            .setUsage(AudioAttributes.USAGE_MEDIA)
+                            .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
+                            .build()
+                    )
+                    .setAudioFormat(
+                        AudioFormat.Builder()
+                            .setEncoding(AudioFormat.ENCODING_PCM_16BIT)
+                            .setSampleRate(rate)
+                            .setChannelMask(AudioFormat.CHANNEL_OUT_STEREO)
+                            .build()
+                    )
+                    .setTransferMode(AudioTrack.MODE_STREAM)
+                    .setBufferSizeInBytes(maxOf(min, 16384))
+                    .build()
+                at.play()
+                at.write(buf, 0, buf.size)
+                Thread.sleep(150)
+                at.stop()
+            } catch (e: Exception) {
+            } finally {
+                try { at?.release() } catch (e: Exception) { }
+            }
+        }.start()
     }
 
     private fun swatch(color: Int, selected: Boolean, tap: () -> Unit): View {

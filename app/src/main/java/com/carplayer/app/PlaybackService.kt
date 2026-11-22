@@ -13,7 +13,6 @@ import android.media.AudioAttributes
 import android.media.AudioFocusRequest
 import android.media.AudioManager
 import android.media.MediaMetadata
-import android.media.MediaPlayer
 import android.media.session.MediaSession
 import android.media.session.PlaybackState
 import android.os.Binder
@@ -21,12 +20,15 @@ import android.os.Build
 import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
-import android.os.PowerManager
 import java.util.concurrent.Executors
 
 /**
  * Motore di riproduzione. Vive in background (servizio in primo piano) così la musica
  * continua anche con il navigatore aperto, e risponde ai tasti del volante (MediaSession).
+ *
+ * L'audio passa da [PcmEngine] (MediaCodec + AudioTrack), lo stesso percorso dei lettori
+ * del Play Store: su queste autoradio MediaPlayer resta muto. Se il PCM non parte,
+ * il servizio ripiega da solo su MediaPlayer.
  */
 class PlaybackService : Service() {
 
@@ -52,21 +54,26 @@ class PlaybackService : Service() {
     var repeat = 0 // 0 = no, 1 = tutta la coda, 2 = brano singolo
         private set
 
+    /** Ultimo errore del motore, mostrato nelle impostazioni per capire cosa non va. */
+    var lastError = ""
+        private set
+
     val current: Track? get() = queue.getOrNull(index)
 
     val positionMs: Int
-        get() = if (prepared) try { player.currentPosition } catch (e: Exception) { 0 } else pendingPos
+        get() = engine?.positionMs ?: pendingPos
 
     val durationMs: Int
-        get() = if (prepared) try { player.duration.coerceAtLeast(0) } catch (e: Exception) { 0 }
-        else (current?.durationMs?.toInt() ?: 0)
+        get() {
+            val d = engine?.durationMs ?: 0
+            return if (d > 0) d else (current?.durationMs?.toInt() ?: 0)
+        }
 
-    private lateinit var player: MediaPlayer
-    private lateinit var session: MediaSession
-    private lateinit var audio: AudioManager
-    private lateinit var route: AudioRoute
-    private lateinit var nm: NotificationManager
+    private var engine: PlayerEngine? = null
+    private var engineKind = ENGINE_AUTO
+    private var pcmBroken = false
     private var prepared = false
+    private var loading = false
     private var pendingPlay = false
     private var pendingPos = 0
     private var errors = 0
@@ -76,6 +83,11 @@ class PlaybackService : Service() {
     private val history = ArrayList<Int>()
     private val main = Handler(Looper.getMainLooper())
     private val io = Executors.newSingleThreadExecutor()
+
+    private lateinit var session: MediaSession
+    private lateinit var audio: AudioManager
+    private lateinit var route: AudioRoute
+    private lateinit var nm: NotificationManager
 
     private val attrs = AudioAttributes.Builder()
         .setUsage(AudioAttributes.USAGE_MEDIA)
@@ -89,19 +101,12 @@ class PlaybackService : Service() {
         audio = getSystemService(Context.AUDIO_SERVICE) as AudioManager
         route = AudioRoute(this)
         route.setSink(Prefs.int(this, "outSink"))
+        engineKind = Prefs.int(this, "engine", ENGINE_AUTO)
         nm = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         shuffle = Prefs.bool(this, "shuffle")
         repeat = Prefs.int(this, "repeat")
 
-        player = MediaPlayer().apply {
-            setOnPreparedListener { onPrepared() }
-            setOnCompletionListener { onCompleted() }
-            setOnErrorListener { _, _, _ -> onError(); true }
-        }
-
         session = MediaSession(this, "CarPlayer")
-        // riproduzione locale su STREAM_MUSIC: la tendina non aggancia più una rotta
-        // Bluetooth/telefonica quando la musica esce dalle casse dell'auto
         if (Build.VERSION.SDK_INT >= 34) session.setPlaybackToLocal(attrs)
         @Suppress("DEPRECATION")
         session.setFlags(
@@ -143,9 +148,9 @@ class PlaybackService : Service() {
     override fun onDestroy() {
         savePosition()
         abandonFocus()
-        route.release()
         session.release()
-        player.release()
+        engine?.release()
+        engine = null
         io.shutdown()
         super.onDestroy()
     }
@@ -160,23 +165,27 @@ class PlaybackService : Service() {
     }
 
     fun play() {
-        if (current == null) return
-        if (!prepared) {
+        val t = current ?: return
+        if (!prepared || engine == null) {
+            // prepare fallita o player perso: si riparte davvero, non si resta in attesa
             pendingPlay = true
             playing = true
-        } else {
-            // il focus è best-effort: su molte autoradio viene negato (radio FM o app
-            // di sistema che lo tengono) ma la musica deve partire lo stesso
-            requestFocus()
-            route.apply()
-            ensureAudible()
-            playing = startPlayer()
+            if (!loading) startEngine(t.path, pendingPos)
+            pushState()
+            return
         }
+        // il focus è best-effort: su molte autoradio viene negato (radio FM o app
+        // di sistema che lo tengono) ma la musica deve partire lo stesso
+        requestFocus()
+        ensureAudible()
+        engine?.setVolume(1f)
+        playing = engine?.start() ?: false
+        if (!playing) lastError = "Avvio rifiutato dal motore"
         pushState()
     }
 
     fun pause() {
-        if (prepared) try { if (player.isPlaying) player.pause() } catch (e: Exception) { }
+        engine?.pause()
         playing = false
         pendingPlay = false
         savePosition()
@@ -197,12 +206,12 @@ class PlaybackService : Service() {
 
     /**
      * Fa partire subito il brano i della coda (tocco su miniatura o riga della lista).
-     * Non mette mai in pausa: sul brano già caricato ma fermo dà solo play.
+     * Non mette mai in pausa: se il brano è già caricato ma fermo, lo avvia davvero.
      */
     fun playAt(i: Int) {
         if (i !in queue.indices) return
         if (i == index) {
-            if (!playing) play()
+            if (!playing || engine?.isPlaying != true) play()
             return
         }
         if (index >= 0) {
@@ -234,17 +243,12 @@ class PlaybackService : Service() {
     }
 
     fun seekTo(ms: Int) {
-        if (prepared) { player.seekTo(ms); pushState() } else pendingPos = ms
-    }
-
-    /**
-     * Cambia a mano l'uscita audio (tocco sullo stato in alto): serve sulle autoradio
-     * che continuano a mandare la musica sulla rotta sbagliata.
-     */
-    fun cycleOutput(): String {
-        val label = route.cycleSink()
-        Prefs.putInt(this, "outSink", route.manualSink)
-        return label
+        if (prepared) {
+            engine?.seekTo(ms)
+            pushState()
+        } else {
+            pendingPos = ms
+        }
     }
 
     /** Uscita scelta a mano (0 = automatica). */
@@ -259,13 +263,40 @@ class PlaybackService : Service() {
     }
 
     /**
-     * Cambia uscita dalle impostazioni. Ricrea il player sulla rotta nuova, così
+     * Cambia uscita dalle impostazioni. Ricrea il motore sulla rotta nuova, così
      * l'audio riparte dallo stesso punto e non resta agganciato alla vecchia uscita.
      */
     fun setOutput(id: Int) {
         if (route.manualSink == id) return
         route.setSink(id)
         Prefs.putInt(this, "outSink", id)
+        if (current == null) return
+        val pos = positionMs
+        loadTrack(index, playing, pos)
+    }
+
+    /**
+     * Cambia a mano l'uscita audio (tocco sullo stato in alto): serve sulle autoradio
+     * che continuano a mandare la musica sulla rotta sbagliata.
+     */
+    fun cycleOutput(): String {
+        val label = route.cycleSink()
+        Prefs.putInt(this, "outSink", route.manualSink)
+        if (current != null) {
+            val pos = positionMs
+            loadTrack(index, playing, pos)
+        }
+        return label
+    }
+
+    /** Motore scelto: [ENGINE_AUTO], [ENGINE_MP] o [ENGINE_PCM]. */
+    val engineMode: Int get() = engineKind
+
+    fun setEngine(kind: Int) {
+        if (engineKind == kind) return
+        engineKind = kind
+        pcmBroken = false
+        Prefs.putInt(this, "engine", kind)
         if (current == null) return
         val pos = positionMs
         loadTrack(index, playing, pos)
@@ -288,7 +319,7 @@ class PlaybackService : Service() {
         Prefs.putInt(this, "lastPos", positionMs)
     }
 
-    // ---------------------------------------------------------------- interno
+    // ---------------------------------------------------------------- motore
 
     private fun loadTrack(i: Int, play: Boolean, posMs: Int = 0) {
         val t = queue.getOrNull(i) ?: return
@@ -298,33 +329,48 @@ class PlaybackService : Service() {
         pendingPlay = play
         pendingPos = posMs
         playing = play
-        try {
-            player.reset()
-            player.setAudioAttributes(attrs)
-            route.attach(player)
-            player.setWakeMode(this, PowerManager.PARTIAL_WAKE_LOCK)
-            player.setDataSource(t.path)
-            player.prepareAsync()
-        } catch (e: Exception) {
-            onError()
-            return
-        }
+        startEngine(t.path, posMs)
         Prefs.putStr(this, "lastPath", t.path)
         Prefs.putInt(this, "lastPos", posMs)
         loadCover(t)
         pushState()
     }
 
+    private fun startEngine(path: String, startMs: Int) {
+        engine?.release()
+        engine = null
+        loading = true
+        prepared = false
+        val usePcm = when (engineKind) {
+            ENGINE_MP -> false
+            ENGINE_PCM -> Build.VERSION.SDK_INT >= 23
+            else -> Build.VERSION.SDK_INT >= 23 && !pcmBroken
+        }
+        val e: PlayerEngine = if (usePcm) PcmEngine() else MpEngine(this)
+        e.onPrepared = { onPrepared() }
+        e.onCompletion = { onCompleted() }
+        e.onError = { msg -> handleEngineError(msg) }
+        engine = e
+        e.setVolume(1f)
+        route.chosen()?.let { e.setPreferredDevice(it) }
+        try {
+            e.load(path, startMs)
+        } catch (ex: Exception) {
+            handleEngineError(ex.message ?: "caricamento")
+        }
+    }
+
     private fun onPrepared() {
         prepared = true
+        loading = false
         errors = 0
-        player.setVolume(1f, 1f)
-        if (pendingPos > 0) player.seekTo(pendingPos)
+        engine?.setVolume(1f)
+        if (pendingPos > 0) engine?.seekTo(pendingPos)
         if (pendingPlay) {
             requestFocus()
-            route.apply()
             ensureAudible()
-            playing = startPlayer()
+            playing = engine?.start() ?: false
+            if (!playing) lastError = "Avvio rifiutato dal motore"
         } else {
             playing = false
         }
@@ -333,11 +379,17 @@ class PlaybackService : Service() {
     }
 
     private fun onCompleted() {
-        if (repeat == 2) { player.seekTo(0); player.start(); return }
+        if (repeat == 2) {
+            engine?.seekTo(0)
+            engine?.start()
+            playing = true
+            pushState()
+            return
+        }
         val nx = nextIndex(true)
         if (nx < 0) {
             playing = false
-            player.seekTo(0)
+            engine?.seekTo(0)
             pushState()
             return
         }
@@ -346,7 +398,26 @@ class PlaybackService : Service() {
         loadTrack(nx, true)
     }
 
-    private fun onError() {
+    /**
+     * Errore del motore. Se era il PCM e siamo in automatico, si passa a MediaPlayer
+     * e si riprova lo stesso brano dallo stesso punto.
+     */
+    private fun handleEngineError(msg: String) {
+        lastError = msg
+        if (engine is PcmEngine && engineKind == ENGINE_AUTO && !pcmBroken) {
+            pcmBroken = true
+            val t = current
+            if (t != null) {
+                startEngine(t.path, pendingPos)
+                pushState()
+                return
+            }
+        }
+        loading = false
+        failTrack()
+    }
+
+    private fun failTrack() {
         prepared = false
         errors++
         if (queue.size <= 1 || errors >= queue.size) {
@@ -389,17 +460,11 @@ class PlaybackService : Service() {
      */
     private val focusListener = AudioManager.OnAudioFocusChangeListener { change ->
         when (change) {
-            AudioManager.AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK ->
-                if (prepared) player.setVolume(0.25f, 0.25f)
-            AudioManager.AUDIOFOCUS_GAIN ->
-                if (prepared) player.setVolume(1f, 1f)
+            AudioManager.AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK -> engine?.setVolume(0.25f)
+            AudioManager.AUDIOFOCUS_GAIN -> engine?.setVolume(1f)
         }
     }
 
-    /**
-     * Su Android 8+ il focus va richiesto con gli AudioAttributes: con l'API vecchia molte
-     * autoradio concedono il focus ma non fanno uscire l'audio (silenzio con il play acceso).
-     */
     private val focusRequest: AudioFocusRequest? by lazy {
         if (Build.VERSION.SDK_INT >= 26) {
             AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN)
@@ -409,14 +474,6 @@ class PlaybackService : Service() {
         } else {
             null
         }
-    }
-
-    /** Avvia la riproduzione; se l'HAL rifiuta il brano resta in pausa invece di crashare. */
-    private fun startPlayer(): Boolean = try {
-        player.start()
-        true
-    } catch (e: Exception) {
-        false
     }
 
     /**
@@ -558,5 +615,10 @@ class PlaybackService : Service() {
         const val ACTION_TOGGLE = "com.carplayer.app.TOGGLE"
         const val ACTION_NEXT = "com.carplayer.app.NEXT"
         const val ACTION_PREV = "com.carplayer.app.PREV"
+
+        /** PCM prima, MediaPlayer se il PCM non parte. */
+        const val ENGINE_AUTO = 0
+        const val ENGINE_MP = 1
+        const val ENGINE_PCM = 2
     }
 }

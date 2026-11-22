@@ -63,7 +63,7 @@
                     android:ellipsize="end"
                     android:gravity="center"
                     android:maxLines="2"
-                    android:minLines="2"
+                    android:minLines="1"
                     android:textColor="#FFFFFF"
                     android:textSize="@dimen/title_sp" />
 
@@ -125,69 +125,69 @@
                         android:textSize="@dimen/time_sp" />
                 </LinearLayout>
 
-                <!-- Comandi -->
-                <LinearLayout
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="@dimen/gap"
-                    android:gravity="center_vertical"
-                    android:orientation="horizontal">
-
-                    <ImageButton
-                        android:id="@+id/btnShuffle"
-                        android:layout_width="@dimen/ctl_side"
-                        android:layout_height="@dimen/ctl_side"
-                        android:background="?android:attr/selectableItemBackgroundBorderless"
-                        android:padding="@dimen/ico_pad"
-                        android:scaleType="fitCenter"
-                        android:src="@drawable/ic_shuffle"
-                        android:tint="#FFFFFF" />
-
-                    <ImageButton
-                        android:id="@+id/btnPrev"
-                        android:layout_width="@dimen/ctl_mid"
-                        android:layout_height="@dimen/ctl_mid"
-                        android:background="?android:attr/selectableItemBackgroundBorderless"
-                        android:padding="@dimen/ico_pad"
-                        android:scaleType="fitCenter"
-                        android:src="@drawable/ic_prev"
-                        android:tint="#FFFFFF" />
-
-                    <ImageButton
-                        android:id="@+id/btnPlay"
-                        android:layout_width="@dimen/play"
-                        android:layout_height="@dimen/play"
-                        android:layout_marginStart="@dimen/gap"
-                        android:layout_marginEnd="@dimen/gap"
-                        android:background="@drawable/bg_play"
-                        android:padding="@dimen/play_pad"
-                        android:scaleType="fitCenter"
-                        android:src="@drawable/ic_play"
-                        android:tint="@color/bg" />
-
-                    <ImageButton
-                        android:id="@+id/btnNext"
-                        android:layout_width="@dimen/ctl_mid"
-                        android:layout_height="@dimen/ctl_mid"
-                        android:background="?android:attr/selectableItemBackgroundBorderless"
-                        android:padding="@dimen/ico_pad"
-                        android:scaleType="fitCenter"
-                        android:src="@drawable/ic_next"
-                        android:tint="#FFFFFF" />
-
-                    <ImageButton
-                        android:id="@+id/btnRepeat"
-                        android:layout_width="@dimen/ctl_side"
-                        android:layout_height="@dimen/ctl_side"
-                        android:background="?android:attr/selectableItemBackgroundBorderless"
-                        android:padding="@dimen/ico_pad"
-                        android:scaleType="fitCenter"
-                        android:src="@drawable/ic_repeat"
-                        android:tint="#FFFFFF" />
-                </LinearLayout>
-
             </LinearLayout>
         </ScrollView>
+
+        <!-- Comandi fuori dallo scroll: il play resta sempre visibile sopra la striscia -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/gap"
+            android:gravity="center"
+            android:orientation="horizontal">
+
+            <ImageButton
+                android:id="@+id/btnShuffle"
+                android:layout_width="@dimen/ctl_side"
+                android:layout_height="@dimen/ctl_side"
+                android:background="?android:attr/selectableItemBackgroundBorderless"
+                android:padding="@dimen/ico_pad"
+                android:scaleType="fitCenter"
+                android:src="@drawable/ic_shuffle"
+                android:tint="#FFFFFF" />
+
+            <ImageButton
+                android:id="@+id/btnPrev"
+                android:layout_width="@dimen/ctl_mid"
+                android:layout_height="@dimen/ctl_mid"
+                android:background="?android:attr/selectableItemBackgroundBorderless"
+                android:padding="@dimen/ico_pad"
+                android:scaleType="fitCenter"
+                android:src="@drawable/ic_prev"
+                android:tint="#FFFFFF" />
+
+            <ImageButton
+                android:id="@+id/btnPlay"
+                android:layout_width="@dimen/play"
+                android:layout_height="@dimen/play"
+                android:layout_marginStart="@dimen/gap"
+                android:layout_marginEnd="@dimen/gap"
+                android:background="@drawable/bg_play"
+                android:padding="@dimen/play_pad"
+                android:scaleType="fitCenter"
+                android:src="@drawable/ic_play"
+                android:tint="@color/bg" />
+
+            <ImageButton
+                android:id="@+id/btnNext"
+                android:layout_width="@dimen/ctl_mid"
+                android:layout_height="@dimen/ctl_mid"
+                android:background="?android:attr/selectableItemBackgroundBorderless"
+                android:padding="@dimen/ico_pad"
+                android:scaleType="fitCenter"
+                android:src="@drawable/ic_next"
+                android:tint="#FFFFFF" />
+
+            <ImageButton
+                android:id="@+id/btnRepeat"
+                android:layout_width="@dimen/ctl_side"
+                android:layout_height="@dimen/ctl_side"
+                android:background="?android:attr/selectableItemBackgroundBorderless"
+                android:padding="@dimen/ico_pad"
+                android:scaleType="fitCenter"
+                android:src="@drawable/ic_repeat"
+                android:tint="#FFFFFF" />
+        </LinearLayout>
 
         <include layout="@layout/strip" />
         </LinearLayout>
