@@ -55,6 +55,7 @@ class MainActivity : Activity(), PlaybackService.Listener {
     private var accent = 0
     private val white = 0xFFFFFFFF.toInt()
     private val gray = 0xFF9AA3AF.toInt()
+    private val heartRed = 0xFFFF4D6D.toInt()
     private var baseBg = 0
 
     private var svc: PlaybackService? = null
@@ -292,7 +293,7 @@ class MainActivity : Activity(), PlaybackService.Listener {
         showList?.findViewById<ImageView>(R.id.ivHandle)?.imageTintList =
             ColorStateList.valueOf(accent)
         tabFolder.setTextColor(if (viewFavs) gray else accent)
-        tabFavs.setTextColor(if (viewFavs) accent else gray)
+        tabFavs.setTextColor(heartRed)
     }
 
     /** Barra di avanzamento ridisegnata col colore del tema. */
@@ -385,11 +386,12 @@ class MainActivity : Activity(), PlaybackService.Listener {
         }
         adapter.notifyDataSetChanged()
 
-        val f = folder
-        tabFolder.text = smallCaps(if (f != null) Library.label(f) + (if (viewFavs) "" else "  ▾") else "Cartella")
-        tabFavs.text = smallCaps("♥ Preferiti")
+        // due sole voci, compatte: ALBUM e il cuore dei preferiti
+        tabFolder.text = smallCaps("Album")
+        tabFavs.text = "♥"
         tabFolder.setTextColor(if (viewFavs) gray else accent)
-        tabFavs.setTextColor(if (viewFavs) accent else gray)
+        tabFavs.setTextColor(heartRed)
+        tabFavs.alpha = if (viewFavs) 1f else 0.55f
 
         when {
             library.isEmpty() ->
@@ -606,43 +608,46 @@ class MainActivity : Activity(), PlaybackService.Listener {
         val engineBox = v.findViewById<LinearLayout>(R.id.engineBox)
         val diag = v.findViewById<TextView>(R.id.audioDiag)
 
+        // modifiche in sospeso: entrano in vigore solo toccando "Salva"
+        var newAccent = accent
+        var newBg = baseBg
+        var newEngine = svc?.engineMode ?: PlaybackService.ENGINE_AUTO
+        var newOutput = svc?.outputId ?: 0
+
         val dlg = AlertDialog.Builder(this, android.R.style.Theme_Material_Dialog_Alert)
             .setView(v)
-            .setNegativeButton("Chiudi", null)
+            .setNegativeButton("Annulla", null)
+            .setPositiveButton("Salva", null)
             .create()
 
         fun paintPalettes() {
             accentPalette.removeAllViews()
             for (c in Themes.ACCENTS) {
-                accentPalette.addView(swatch(c, c == accent) {
-                    Prefs.putInt(this, "accent", c)
-                    dlg.dismiss()
-                    recreate()
+                accentPalette.addView(swatch(c, c == newAccent) {
+                    newAccent = c
+                    paintPalettes()
                 })
             }
             bgPalette.removeAllViews()
             for (c in Themes.BACKGROUNDS) {
-                bgPalette.addView(swatch(c, c == baseBg) {
-                    Prefs.putInt(this, "bg", c)
-                    dlg.dismiss()
-                    recreate()
+                bgPalette.addView(swatch(c, c == newBg) {
+                    newBg = c
+                    paintPalettes()
                 })
             }
         }
 
         fun paintOutputs() {
             outBox.removeAllViews()
-            val s = svc
-            val cur = s?.outputId ?: 0
-            for ((id, name) in s?.outputOptions() ?: listOf(0 to "Automatico (consigliato)")) {
+            for ((id, name) in svc?.outputOptions() ?: listOf(0 to "Automatico (consigliato)")) {
                 val tv = TextView(this)
-                tv.text = (if (id == cur) "●  " else "○  ") + name
-                tv.setTextColor(if (id == cur) accent else gray)
+                tv.text = (if (id == newOutput) "●  " else "○  ") + name
+                tv.setTextColor(if (id == newOutput) newAccent else gray)
                 tv.setTextSize(TypedValue.COMPLEX_UNIT_SP, 16f)
                 tv.typeface = listFont
                 tv.setPadding(0, (10 * dp).toInt(), 0, (10 * dp).toInt())
                 tv.setOnClickListener {
-                    s?.setOutput(id)
+                    newOutput = id
                     paintOutputs()
                 }
                 outBox.addView(tv)
@@ -659,7 +664,7 @@ class MainActivity : Activity(), PlaybackService.Listener {
                 AudioManager.MODE_RINGTONE -> "suoneria"
                 else -> "normale"
             }
-            val eng = when (s?.engineMode ?: 0) {
+            val eng = when (newEngine) {
                 PlaybackService.ENGINE_MP -> "MediaPlayer"
                 PlaybackService.ENGINE_PCM -> "PCM"
                 else -> "auto"
@@ -671,7 +676,6 @@ class MainActivity : Activity(), PlaybackService.Listener {
 
         fun paintEngine() {
             engineBox.removeAllViews()
-            val cur = svc?.engineMode ?: PlaybackService.ENGINE_AUTO
             val opts = listOf(
                 PlaybackService.ENGINE_AUTO to "Automatico (PCM, consigliato)",
                 PlaybackService.ENGINE_MP to "MediaPlayer",
@@ -679,13 +683,13 @@ class MainActivity : Activity(), PlaybackService.Listener {
             )
             for ((id, name) in opts) {
                 val tv = TextView(this)
-                tv.text = (if (id == cur) "●  " else "○  ") + name
-                tv.setTextColor(if (id == cur) accent else gray)
+                tv.text = (if (id == newEngine) "●  " else "○  ") + name
+                tv.setTextColor(if (id == newEngine) newAccent else gray)
                 tv.setTextSize(TypedValue.COMPLEX_UNIT_SP, 16f)
                 tv.typeface = listFont
                 tv.setPadding(0, (8 * dp).toInt(), 0, (8 * dp).toInt())
                 tv.setOnClickListener {
-                    svc?.setEngine(id)
+                    newEngine = id
                     paintEngine()
                     paintDiag()
                 }
@@ -704,6 +708,15 @@ class MainActivity : Activity(), PlaybackService.Listener {
         dlg.setOnShowListener {
             val w = (resources.displayMetrics.widthPixels * 0.55f).toInt()
             dlg.window?.setLayout(w, ViewGroup.LayoutParams.WRAP_CONTENT)
+            // "Salva": memorizza tema, motore e uscita scelti
+            dlg.getButton(android.content.DialogInterface.BUTTON_POSITIVE).setOnClickListener {
+                Prefs.putInt(this, "accent", newAccent)
+                Prefs.putInt(this, "bg", newBg)
+                svc?.setEngine(newEngine)
+                svc?.setOutput(newOutput)
+                dlg.dismiss()
+                if (newAccent != accent || newBg != baseBg) recreate()
+            }
         }
         dlg.show()
     }
@@ -849,11 +862,22 @@ class MainActivity : Activity(), PlaybackService.Listener {
         }
     }
 
-    private fun showPlaceholder(iv: ImageView) {
-        val p = (22 * dp).toInt()
+    private fun showPlaceholder(iv: ImageView, path: String) {
+        val p = (18 * dp).toInt()
         iv.setPadding(p, p, p, p)
         iv.scaleType = ImageView.ScaleType.FIT_CENTER
+        iv.background = gradientFor(path)
         iv.setImageResource(R.drawable.ic_note)
+    }
+
+    /** Sfumatura casuale (ma sempre uguale per lo stesso brano) quando manca la copertina. */
+    private fun gradientFor(path: String): GradientDrawable {
+        val h = (abs(path.hashCode()) % 360).toFloat()
+        val c1 = Color.HSVToColor(floatArrayOf(h, 0.55f, 0.62f))
+        val c2 = Color.HSVToColor(floatArrayOf((h + 42f) % 360f, 0.72f, 0.28f))
+        return GradientDrawable(
+            GradientDrawable.Orientation.TL_BR, intArrayOf(c1, c2)
+        ).apply { cornerRadius = 8 * dp }
     }
 
     private fun showCover(iv: ImageView, b: Bitmap) {
@@ -869,7 +893,7 @@ class MainActivity : Activity(), PlaybackService.Listener {
             showCover(iv, b)
             return
         }
-        showPlaceholder(iv)
+        showPlaceholder(iv, path)
         if (path in noThumb || !loading.add(path)) return
         thumbExec.execute {
             val skipped = path !in wanted

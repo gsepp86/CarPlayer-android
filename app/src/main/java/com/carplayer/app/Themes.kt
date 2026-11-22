@@ -14,6 +14,7 @@ object Themes {
     /** Colori principali: vivaci, ben distinguibili anche di giorno in auto. */
     val ACCENTS = intArrayOf(
         0xFF3DDC97.toInt(), // verde
+        0xFFF44336.toInt(), // rosso
         0xFF4DD0E1.toInt(), // turchese
         0xFF4FC3F7.toInt(), // azzurro
         0xFF64B5F6.toInt(), // blu
