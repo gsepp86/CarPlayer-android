@@ -22,6 +22,10 @@ import android.media.AudioAttributes
 import android.media.AudioFormat
 import android.media.AudioManager
 import android.media.AudioTrack
+import android.media.MediaCodecList
+import android.media.MediaExtractor
+import android.media.MediaFormat
+import android.net.Uri
 import android.text.SpannableStringBuilder
 import android.text.Spanned
 import android.text.style.RelativeSizeSpan
@@ -670,6 +674,12 @@ class MainActivity : Activity(), PlaybackService.Listener {
         paintPalettes()
         paintOutputs()
         paintDiag()
+        // controllo del brano in corso: dice se il file si apre e se esiste il decoder
+        Thread {
+            val t = svc?.current ?: return@Thread
+            val line = "\n" + probeTrack(t)
+            runOnUiThread { diag.append(line) }
+        }.start()
         v.findViewById<TextView>(R.id.btnTest).setOnClickListener {
             playTestTone()
             diag.postDelayed({ paintDiag() }, 300)
@@ -687,6 +697,37 @@ class MainActivity : Activity(), PlaybackService.Listener {
             }
         }
         dlg.show()
+    }
+
+    /**
+     * Controllo del brano corrente: apre il file (via URI), legge la traccia audio
+     * e cerca un decoder. Serve a capire subito se mancano i codec o l'accesso.
+     */
+    private fun probeTrack(t: Track): String = try {
+        val uri = Uri.parse(t.playUri)
+        val afd = if (uri.scheme == "content") contentResolver.openAssetFileDescriptor(uri, "r") else null
+        val ex = MediaExtractor()
+        if (afd != null) ex.setDataSource(afd.fileDescriptor, afd.startOffset, afd.length)
+        else ex.setDataSource(t.playUri)
+        var fmt: MediaFormat? = null
+        for (i in 0 until ex.trackCount) {
+            val f = ex.getTrackFormat(i)
+            val m = f.getString(MediaFormat.KEY_MIME) ?: continue
+            if (m.startsWith("audio/")) { fmt = f; break }
+        }
+        try { ex.release() } catch (e: Exception) { }
+        try { afd?.close() } catch (e: Exception) { }
+        if (fmt == null) {
+            "Brano: nessuna traccia audio nel file"
+        } else {
+            val mime = fmt.getString(MediaFormat.KEY_MIME) ?: "?"
+            val dec = try { MediaCodecList(MediaCodecList.REGULAR_CODECS).findDecoderForFormat(fmt) }
+            catch (e: Exception) { null }
+            "Brano: $mime · decoder " + (dec ?: "ASSENTE") + " · file leggibile"
+        }
+    } catch (e: Exception) {
+        "Brano: apertura fallita (" + e.javaClass.simpleName + ": " +
+            (e.message ?: "").take(60) + ")"
     }
 
     /** Tono di 1,5 s su AudioTrack: dice subito se l'uscita audio funziona. */

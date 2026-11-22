@@ -71,6 +71,8 @@ class PlaybackService : Service() {
 
     private var engine: PlayerEngine? = null
     private var prepared = false
+    /** 0 = PCM diretto (quello del "Prova audio"), 1 = ExoPlayer se il PCM fallisce. */
+    private var engineStep = 0
     private var loading = false
     private var pendingPlay = false
     private var pendingPos = 0
@@ -310,6 +312,7 @@ class PlaybackService : Service() {
         index = i
         upcoming = -1
         prepared = false
+        engineStep = 0
         pendingPlay = play
         pendingPos = posMs
         playing = play
@@ -323,12 +326,15 @@ class PlaybackService : Service() {
     private fun startEngine(source: String, startMs: Int) {
         loading = true
         prepared = false
-        // un solo ExoPlayer per tutta la sessione: cambiare brano è un semplice setMediaItem,
-        // senza creare/rilasciare audio sul thread dell'interfaccia
-        var e = engine
-        if (e !is ExoEngine) {
+        // PCM diretto come prima scelta: scrive su AudioTrack, la stessa uscita del
+        // "Prova audio" che si sente. Se non riesce, si passa a ExoPlayer.
+        val usePcm = engineStep == 0
+        val existing = engine
+        val reuse = if (usePcm) existing is PcmEngine else existing is ExoEngine
+        var e = existing
+        if (e == null || !reuse) {
             e?.release()
-            val n = ExoEngine(this)
+            val n: PlayerEngine = if (usePcm) PcmEngine(this) else ExoEngine(this)
             n.onPrepared = { onPrepared() }
             n.onCompletion = { onCompleted() }
             n.onError = { msg -> handleEngineError(msg) }
@@ -348,6 +354,7 @@ class PlaybackService : Service() {
         prepared = true
         loading = false
         errors = 0
+        lastError = ""
         engine?.setVolume(1f)
         if (pendingPos > 0) engine?.seekTo(pendingPos)
         if (pendingPlay) {
@@ -382,9 +389,21 @@ class PlaybackService : Service() {
         loadTrack(nx, true)
     }
 
-    /** Errore del motore: si registra per la diagnostica e si passa al brano dopo. */
+    /**
+     * Errore del motore. Prima si prova l'altro motore (PCM → ExoPlayer) sullo stesso
+     * brano e dallo stesso punto; se falliscono entrambi si passa al brano dopo.
+     */
     private fun handleEngineError(msg: String) {
-        lastError = msg
+        lastError = if (engineStep == 0) "PCM $msg" else "Exo $msg"
+        val t = current
+        if (engineStep == 0 && t != null) {
+            engineStep = 1
+            engine?.release()
+            engine = null
+            startEngine(t.playUri, pendingPos)
+            pushState()
+            return
+        }
         loading = false
         failTrack()
     }
