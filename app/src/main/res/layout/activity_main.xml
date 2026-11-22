@@ -128,11 +128,12 @@
             </LinearLayout>
         </ScrollView>
 
-        <!-- Comandi fuori dallo scroll: il play resta sempre visibile sopra la striscia -->
+        <!-- Comandi fuori dallo scroll: il play resta sempre visibile sopra la striscia.
+             Tirati leggermente verso l'alto, vicino alla barra di avanzamento. -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="@dimen/gap"
+            android:layout_marginTop="0dp"
             android:gravity="center"
             android:orientation="horizontal">
 

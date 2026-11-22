@@ -469,7 +469,7 @@ class MainActivity : Activity(), PlaybackService.Listener {
             val row = LinearLayout(this).apply {
                 orientation = LinearLayout.HORIZONTAL
                 gravity = Gravity.CENTER_VERTICAL
-                setPadding((16 * dp).toInt(), (9 * dp).toInt(), (16 * dp).toInt(), (9 * dp).toInt())
+                setPadding((20 * dp).toInt(), (12 * dp).toInt(), (20 * dp).toInt(), (12 * dp).toInt())
                 setBackgroundResource(R.drawable.bg_row)
             }
             // numero assegnato dall'app, per riconoscere subito la cartella
@@ -477,28 +477,28 @@ class MainActivity : Activity(), PlaybackService.Listener {
                 text = (i + 1).toString()
                 gravity = Gravity.CENTER
                 setTextColor(baseBg)
-                textSize = 17f
+                textSize = 22f
                 typeface = listFont
                 background = GradientDrawable().apply {
                     shape = GradientDrawable.OVAL
                     setColor(accent)
                 }
             }
-            row.addView(num, LinearLayout.LayoutParams((30 * dp).toInt(), (30 * dp).toInt()))
+            row.addView(num, LinearLayout.LayoutParams((36 * dp).toInt(), (36 * dp).toInt()))
 
             val disc = ImageView(this).apply {
                 setImageResource(R.drawable.ic_disc)
                 imageTintList = ColorStateList.valueOf(accent)
             }
-            val dl = LinearLayout.LayoutParams((26 * dp).toInt(), (26 * dp).toInt())
-            dl.marginStart = (12 * dp).toInt()
-            dl.marginEnd = (10 * dp).toInt()
+            val dl = LinearLayout.LayoutParams((32 * dp).toInt(), (32 * dp).toInt())
+            dl.marginStart = (14 * dp).toInt()
+            dl.marginEnd = (12 * dp).toInt()
             row.addView(disc, dl)
 
             val name = TextView(this).apply {
                 text = Library.label(path)
                 setTextColor(white)
-                textSize = 18f
+                textSize = 24f
                 typeface = listFont
                 maxLines = 1
                 ellipsize = android.text.TextUtils.TruncateAt.END
@@ -508,7 +508,7 @@ class MainActivity : Activity(), PlaybackService.Listener {
             val cnt = TextView(this).apply {
                 text = "($count)"
                 setTextColor(gray)
-                textSize = 15f
+                textSize = 19f
                 typeface = listFont
             }
             row.addView(cnt)
@@ -530,8 +530,8 @@ class MainActivity : Activity(), PlaybackService.Listener {
         dlg = d
         d.setOnShowListener {
             d.window?.setLayout(
-                (resources.displayMetrics.widthPixels * 0.52f).toInt(),
-                (resources.displayMetrics.heightPixels * 0.72f).toInt()
+                (resources.displayMetrics.widthPixels * 0.68f).toInt(),
+                (resources.displayMetrics.heightPixels * 0.82f).toInt()
             )
         }
         d.show()

@@ -1,6 +1,6 @@
 <resources>
     <!-- Grande: schermi autoradio 1024x600 e tablet 7 pollici -->
-    <dimen name="pad">12dp</dimen>
+    <dimen name="pad">10dp</dimen>
     <dimen name="header_h">44dp</dimen>
     <dimen name="logo">32dp</dimen>
     <dimen name="eq_w">28dp</dimen>
@@ -19,7 +19,7 @@
     <dimen name="play_pad">18dp</dimen>
     <dimen name="time_sp">13sp</dimen>
     <dimen name="time_w">54dp</dimen>
-    <dimen name="seek_h">30dp</dimen>
+    <dimen name="seek_h">26dp</dimen>
     <dimen name="seek_thick">8dp</dimen>
     <dimen name="strip_thumb">76dp</dimen>
     <dimen name="strip_item">108dp</dimen>

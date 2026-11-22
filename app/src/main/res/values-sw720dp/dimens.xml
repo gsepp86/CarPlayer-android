@@ -1,6 +1,6 @@
 <resources>
     <!-- Extra grande: tablet da 10 pollici e oltre -->
-    <dimen name="pad">16dp</dimen>
+    <dimen name="pad">14dp</dimen>
     <dimen name="header_h">52dp</dimen>
     <dimen name="logo">40dp</dimen>
     <dimen name="eq_w">34dp</dimen>
@@ -19,7 +19,7 @@
     <dimen name="play_pad">21dp</dimen>
     <dimen name="time_sp">15sp</dimen>
     <dimen name="time_w">64dp</dimen>
-    <dimen name="seek_h">34dp</dimen>
+    <dimen name="seek_h">28dp</dimen>
     <dimen name="seek_thick">10dp</dimen>
     <dimen name="strip_thumb">92dp</dimen>
     <dimen name="strip_item">126dp</dimen>
