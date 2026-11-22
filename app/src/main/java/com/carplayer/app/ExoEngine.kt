@@ -65,9 +65,11 @@ class ExoEngine(context: Context) : PlayerEngine {
         player.addListener(listener)
     }
 
-    override fun load(path: String, startMs: Int) {
+    override fun load(source: String, startMs: Int) {
         prepared = false
-        val item = MediaItem.fromUri(Uri.fromFile(File(path)))
+        // content:// è la via sicura (anche su USB); i percorsi restano supportati
+        val uri = if (source.contains("://")) Uri.parse(source) else Uri.fromFile(File(source))
+        val item = MediaItem.fromUri(uri)
         player.setMediaItem(item, startMs.coerceAtLeast(0).toLong())
         player.prepare()
     }

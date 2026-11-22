@@ -792,7 +792,7 @@ class MainActivity : Activity(), PlaybackService.Listener {
         // le copertine si caricano una alla volta, partendo da quelle più vicine al brano attuale
         for (i in (stripFrom until stripTo).sortedBy { abs(it - cur) }) {
             val iv = stripBox.getChildAt(i - stripFrom).findViewById<ImageView>(R.id.thImg)
-            loadThumb(q[i].path, iv)
+            loadThumb(q[i], iv)
         }
     }
 
@@ -854,7 +854,8 @@ class MainActivity : Activity(), PlaybackService.Listener {
         iv.setImageBitmap(b)
     }
 
-    private fun loadThumb(path: String, iv: ImageView) {
+    private fun loadThumb(t: Track, iv: ImageView) {
+        val path = t.path
         iv.tag = path
         val b = thumbs[path]
         if (b != null) {
@@ -865,7 +866,8 @@ class MainActivity : Activity(), PlaybackService.Listener {
         if (path in noThumb || !loading.add(path)) return
         thumbExec.execute {
             val skipped = path !in wanted
-            val bmp: Bitmap? = if (skipped) null else Covers.load(path, 120)?.let { shrink(it) }
+            val bmp: Bitmap? = if (skipped) null
+            else Covers.load(this, t.playUri, path, 120)?.let { shrink(it) }
             runOnUiThread {
                 loading.remove(path)
                 if (bmp != null) {

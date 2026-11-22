@@ -167,7 +167,7 @@ class PlaybackService : Service() {
             // prepare fallita o player perso: si riparte davvero, non si resta in attesa
             pendingPlay = true
             playing = true
-            if (!loading) startEngine(t.path, pendingPos)
+            if (!loading) startEngine(t.playUri, pendingPos)
             pushState()
             return
         }
@@ -313,14 +313,14 @@ class PlaybackService : Service() {
         pendingPlay = play
         pendingPos = posMs
         playing = play
-        startEngine(t.path, posMs)
+        startEngine(t.playUri, posMs)
         Prefs.putStr(this, "lastPath", t.path)
         Prefs.putInt(this, "lastPos", posMs)
         loadCover(t)
         pushState()
     }
 
-    private fun startEngine(path: String, startMs: Int) {
+    private fun startEngine(source: String, startMs: Int) {
         loading = true
         prepared = false
         // un solo ExoPlayer per tutta la sessione: cambiare brano è un semplice setMediaItem,
@@ -338,7 +338,7 @@ class PlaybackService : Service() {
         e.setVolume(1f)
         route.chosen()?.let { e.setPreferredDevice(it) }
         try {
-            e.load(path, startMs)
+            e.load(source, startMs)
         } catch (ex: Exception) {
             handleEngineError(ex.message ?: "caricamento")
         }
@@ -414,7 +414,7 @@ class PlaybackService : Service() {
         val token = ++coverToken
         cover = null
         io.execute {
-            val b = Covers.load(t.path, 600)
+            val b = Covers.load(this@PlaybackService, t.playUri, t.path, 600)
             main.post {
                 if (token == coverToken) { cover = b; pushState() }
             }
