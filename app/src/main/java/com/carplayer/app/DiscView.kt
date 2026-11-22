@@ -30,10 +30,18 @@ class DiscView @JvmOverloads constructor(ctx: Context, attrs: AttributeSet? = nu
         strokeWidth = 1f
         color = 0xFF1E2025.toInt()
     }
+    // Linea esterna del disco: un po' più contrastata dell'originale,
+    // ma senza esagerare (ridotta rispetto alla v2.6).
     private val rim = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.STROKE
-        strokeWidth = 3.5f * density
+        strokeWidth = 2.5f * density
         color = 0xFF6B7280.toInt()
+    }
+    // Linea intorno all'etichetta centrale: come era prima (più sottile e scura).
+    private val innerRim = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.STROKE
+        strokeWidth = 2f * density
+        color = 0xFF2B2E35.toInt()
     }
     private val label = Paint(Paint.ANTI_ALIAS_FLAG)
     private var accent = 0xFF3DDC97.toInt()
@@ -148,6 +156,6 @@ class DiscView @JvmOverloads constructor(ctx: Context, attrs: AttributeSet? = nu
                 it.draw(c)
             }
         }
-        c.drawCircle(cx, cy, rc, rim)
+        c.drawCircle(cx, cy, rc, innerRim)
     }
 }
