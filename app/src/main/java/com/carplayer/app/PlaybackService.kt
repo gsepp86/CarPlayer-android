@@ -5,10 +5,8 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.Service
-import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
-import android.content.IntentFilter
 import android.content.pm.ServiceInfo
 import android.graphics.Bitmap
 import android.media.AudioAttributes
@@ -71,7 +69,6 @@ class PlaybackService : Service() {
     private var prepared = false
     private var pendingPlay = false
     private var pendingPos = 0
-    private var resumeOnFocus = false
     private var errors = 0
     private var isForeground = false
     private var coverToken = 0
@@ -91,7 +88,7 @@ class PlaybackService : Service() {
         super.onCreate()
         audio = getSystemService(Context.AUDIO_SERVICE) as AudioManager
         route = AudioRoute(this)
-        route.manualSink = Prefs.int(this, "outSink")
+        route.setSink(Prefs.int(this, "outSink"))
         nm = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         shuffle = Prefs.bool(this, "shuffle")
         repeat = Prefs.int(this, "repeat")
@@ -125,7 +122,6 @@ class PlaybackService : Service() {
                 NotificationChannel(CHANNEL, "Riproduzione", NotificationManager.IMPORTANCE_LOW)
             )
         }
-        registerReceiver(noisy, IntentFilter(AudioManager.ACTION_AUDIO_BECOMING_NOISY))
     }
 
     override fun onBind(intent: Intent?): IBinder = binder
@@ -146,7 +142,6 @@ class PlaybackService : Service() {
 
     override fun onDestroy() {
         savePosition()
-        try { unregisterReceiver(noisy) } catch (e: Exception) { }
         abandonFocus()
         route.release()
         session.release()
@@ -177,7 +172,6 @@ class PlaybackService : Service() {
             ensureAudible()
             playing = startPlayer()
         }
-        resumeOnFocus = false
         pushState()
     }
 
@@ -185,7 +179,6 @@ class PlaybackService : Service() {
         if (prepared) try { if (player.isPlaying) player.pause() } catch (e: Exception) { }
         playing = false
         pendingPlay = false
-        resumeOnFocus = false
         savePosition()
         pushState()
     }
@@ -202,10 +195,16 @@ class PlaybackService : Service() {
         }
     }
 
-    /** Salta direttamente al brano i della coda (usato dalle miniature). Sul brano attuale fa play/pausa. */
-    fun playIndex(i: Int) {
+    /**
+     * Fa partire subito il brano i della coda (tocco su miniatura o riga della lista).
+     * Non mette mai in pausa: sul brano già caricato ma fermo dà solo play.
+     */
+    fun playAt(i: Int) {
         if (i !in queue.indices) return
-        if (i == index) { togglePlay(); return }
+        if (i == index) {
+            if (!playing) play()
+            return
+        }
         if (index >= 0) {
             history.add(index)
             if (history.size > 200) history.removeAt(0)
@@ -246,6 +245,30 @@ class PlaybackService : Service() {
         val label = route.cycleSink()
         Prefs.putInt(this, "outSink", route.manualSink)
         return label
+    }
+
+    /** Uscita scelta a mano (0 = automatica). */
+    val outputId: Int get() = route.manualSink
+
+    /** Elenco per le impostazioni: prima l'automatico, poi le uscite disponibili. */
+    fun outputOptions(): List<Pair<Int, String>> {
+        val l = ArrayList<Pair<Int, String>>()
+        l.add(AudioRoute.AUTO to "Automatico (consigliato)")
+        for (d in route.outputs()) l.add(d.id to route.labelOf(d))
+        return l
+    }
+
+    /**
+     * Cambia uscita dalle impostazioni. Ricrea il player sulla rotta nuova, così
+     * l'audio riparte dallo stesso punto e non resta agganciato alla vecchia uscita.
+     */
+    fun setOutput(id: Int) {
+        if (route.manualSink == id) return
+        route.setSink(id)
+        Prefs.putInt(this, "outSink", id)
+        if (current == null) return
+        val pos = positionMs
+        loadTrack(index, playing, pos)
     }
 
     fun toggleShuffle() {
@@ -357,15 +380,19 @@ class PlaybackService : Service() {
 
     // ---------------------------------------------------------------- audio focus
 
+    /**
+     * Su queste autoradio il focus viene revocato appena parte la musica (radio FM o
+     * app di sistema che lo tengono): reagire mettendo in pausa faceva fermare il brano
+     * un istante dopo il tocco, e sembrava che la traccia fosse solo selezionata.
+     * Quindi la musica non si ferma mai per il focus: al massimo si abbassa il volume
+     * durante gli avvisi del navigatore.
+     */
     private val focusListener = AudioManager.OnAudioFocusChangeListener { change ->
         when (change) {
-            AudioManager.AUDIOFOCUS_LOSS -> pause()
-            AudioManager.AUDIOFOCUS_LOSS_TRANSIENT -> if (playing) { pause(); resumeOnFocus = true }
-            AudioManager.AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK -> if (prepared) player.setVolume(0.25f, 0.25f)
-            AudioManager.AUDIOFOCUS_GAIN -> {
+            AudioManager.AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK ->
+                if (prepared) player.setVolume(0.25f, 0.25f)
+            AudioManager.AUDIOFOCUS_GAIN ->
                 if (prepared) player.setVolume(1f, 1f)
-                if (resumeOnFocus) { resumeOnFocus = false; play() }
-            }
         }
     }
 
@@ -424,17 +451,6 @@ class PlaybackService : Service() {
     private fun abandonFocus() {
         val req = focusRequest
         if (req != null) audio.abandonAudioFocusRequest(req) else audio.abandonAudioFocus(focusListener)
-    }
-
-    private val noisy = object : BroadcastReceiver() {
-        override fun onReceive(c: Context?, i: Intent?) {
-            if (i?.action != AudioManager.ACTION_AUDIO_BECOMING_NOISY) return
-            // Se la musica sta già uscendo dalle casse dell'auto non si è scollegato
-            // niente: l'avviso arriva anche quando la radio spegne il Bluetooth, e la
-            // traccia non deve andare in pausa.
-            if (route.onBuiltInSpeaker) return
-            pause()
-        }
     }
 
     // ---------------------------------------------------------------- sessione e notifica

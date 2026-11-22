@@ -10,10 +10,14 @@ import android.content.Context
 import android.content.Intent
 import android.content.ServiceConnection
 import android.content.pm.PackageManager
+import android.content.res.ColorStateList
 import android.graphics.Bitmap
 import android.graphics.Color
 import android.graphics.Paint
+import android.graphics.drawable.ClipDrawable
+import android.graphics.drawable.Drawable
 import android.graphics.drawable.GradientDrawable
+import android.graphics.drawable.LayerDrawable
 import android.media.AudioManager
 import android.text.SpannableStringBuilder
 import android.text.Spanned
@@ -24,6 +28,8 @@ import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
 import android.util.TypedValue
+import android.view.Gravity
+import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
 import android.view.ViewTreeObserver
@@ -41,10 +47,10 @@ import kotlin.math.min
 
 class MainActivity : Activity(), PlaybackService.Listener {
 
-    private val accent = 0xFF3DDC97.toInt()
+    private var accent = 0
     private val white = 0xFFFFFFFF.toInt()
     private val gray = 0xFF9AA3AF.toInt()
-    private val baseBg = 0xFF0A0C10.toInt()
+    private var baseBg = 0
 
     private var svc: PlaybackService? = null
     private var library: List<Track> = emptyList()
@@ -56,7 +62,7 @@ class MainActivity : Activity(), PlaybackService.Listener {
     private var userSeeking = false
     private var lastCover: Bitmap? = null
     private var lastShownPath: String? = null
-    private var bgColor = 0xFF0F2A24.toInt()
+    private var bgColor = 0
 
     private lateinit var root: View
     private lateinit var disc: DiscView
@@ -66,6 +72,7 @@ class MainActivity : Activity(), PlaybackService.Listener {
     private lateinit var tvDur: TextView
     private lateinit var tvEmpty: TextView
     private lateinit var tvStatus: TextView
+    private lateinit var tvBrand: TextView
     private lateinit var tabFolder: TextView
     private lateinit var tabFavs: TextView
     private lateinit var heart: ImageButton
@@ -79,6 +86,16 @@ class MainActivity : Activity(), PlaybackService.Listener {
     private lateinit var stripBox: LinearLayout
     private val adapter = TrackAdapter()
     private val ui = Handler(Looper.getMainLooper())
+
+    // ---- pannello di destra: si nasconde con uno swipe e la parte restante si allarga
+    private var rightCol: View? = null
+    private var centerCol: View? = null
+    private var discCol: View? = null
+    private var showList: View? = null
+    private var listHidden = false
+    private var downX = 0f
+    private var downY = 0f
+    private var downInList = false
 
     // ---- striscia di miniature: finestra di al massimo 81 brani attorno a quello in esecuzione
     private var stripQueue: List<Track>? = null
@@ -98,7 +115,7 @@ class MainActivity : Activity(), PlaybackService.Listener {
     private val thumbExec = Executors.newSingleThreadExecutor()
     private val dp: Float get() = resources.displayMetrics.density
     private val am by lazy { getSystemService(Context.AUDIO_SERVICE) as AudioManager }
-    private var condTypeface: android.graphics.Typeface? = null
+    private var listFont: android.graphics.Typeface? = null
 
     private val conn = object : ServiceConnection {
         override fun onServiceConnected(n: ComponentName?, b: IBinder?) {
@@ -128,6 +145,9 @@ class MainActivity : Activity(), PlaybackService.Listener {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        accent = Themes.accent(this)
+        baseBg = Themes.bg(this)
+        bgColor = baseBg
         setContentView(R.layout.activity_main)
 
         root = findViewById(R.id.root)
@@ -138,6 +158,7 @@ class MainActivity : Activity(), PlaybackService.Listener {
         tvDur = findViewById(R.id.tvDur)
         tvEmpty = findViewById(R.id.tvEmpty)
         tvStatus = findViewById(R.id.tvStatus)
+        tvBrand = findViewById(R.id.tvBrand)
         tabFolder = findViewById(R.id.tabFolder)
         tabFavs = findViewById(R.id.tabFavs)
         heart = findViewById(R.id.btnHeart)
@@ -149,25 +170,33 @@ class MainActivity : Activity(), PlaybackService.Listener {
         eq = findViewById(R.id.eq)
         strip = findViewById(R.id.strip)
         stripBox = findViewById(R.id.stripBox)
+        rightCol = findViewById(R.id.rightCol)
+        centerCol = findViewById(R.id.centerCol)
+        discCol = findViewById(R.id.discCol)
+        showList = findViewById(R.id.showList)
 
         // carattere robotico per titolo, tempi, barra superiore e orologio
         val robo = Fonts.display(this)
         val roboViews = listOf<TextView>(
-            tvTitle, tvPos, tvDur, tvStatus,
-            findViewById(R.id.tvBrand), findViewById(R.id.clock), findViewById(R.id.dateClock)
+            tvTitle, tvPos, tvDur, tvStatus, tvBrand,
+            findViewById(R.id.clock), findViewById(R.id.dateClock)
         )
         for (v in roboViews) v.typeface = robo
-        // schede, lista e didascalie in carattere condensato, così i nomi lunghi entrano
-        val cond = Fonts.condensed(this)
-        tabFolder.typeface = cond
-        tabFavs.typeface = cond
-        condTypeface = cond
+        // schede, lista e didascalie in Barlow Bold: largo e leggibile, non condensato
+        val read = Fonts.legible(this)
+        tabFolder.typeface = read
+        tabFavs.typeface = read
+        listFont = read
         findViewById<View>(R.id.dateClock).visibility =
             if (resources.getBoolean(R.bool.show_date)) View.VISIBLE else View.GONE
 
         list.adapter = adapter
         list.setOnItemClickListener { _, _, pos, _ -> playFromList(pos) }
+        // le righe non devono prendere il focus: il tocco deve arrivare alla lista
+        list.setItemsCanFocus(false)
+        list.isClickable = true
         strip.setOnTouchListener { _, _ -> stripTouchAt = System.currentTimeMillis(); false }
+        showList?.setOnClickListener { setListHidden(false) }
 
         disc.setOnClickListener { svc?.togglePlay() }
         btnPlay.setOnClickListener { svc?.togglePlay() }
@@ -179,7 +208,9 @@ class MainActivity : Activity(), PlaybackService.Listener {
         tabFavs.setOnClickListener { setView(true) }
         tabFolder.setOnClickListener { if (viewFavs) setView(false) else chooseFolder() }
         tvEmpty.setOnClickListener { if (library.isEmpty()) ensurePermission() }
-        // tocco sullo stato in alto: cambia l'uscita audio (se la radio instrada male)
+        // impostazioni: tema con palette colori e uscita audio
+        findViewById<View>(R.id.btnSettings).setOnClickListener { showSettings() }
+        // tocco sullo stato in alto: cambia al volo l'uscita audio
         tvStatus.setOnClickListener {
             val s = svc ?: return@setOnClickListener
             android.widget.Toast.makeText(
@@ -199,6 +230,8 @@ class MainActivity : Activity(), PlaybackService.Listener {
                 svc?.seekTo(sb?.progress ?: 0)
             }
         })
+
+        applyTheme()
 
         viewFavs = Prefs.str(this, "view", "folder") == "favs"
         folder = Prefs.str(this, "folder", null)
@@ -231,6 +264,48 @@ class MainActivity : Activity(), PlaybackService.Listener {
     }
 
     override fun onPlaybackChanged() = render()
+
+    // ---------------------------------------------------------------- tema
+
+    /** Applica il colore principale e lo sfondo scelti dall'ingranaggio. */
+    private fun applyTheme() {
+        window.statusBarColor = baseBg
+        window.navigationBarColor = baseBg
+        root.background = GradientDrawable(
+            GradientDrawable.Orientation.TL_BR, intArrayOf(bgColor, baseBg)
+        )
+        tvBrand.setTextColor(accent)
+        eq.setAccent(accent)
+        disc.setAccent(accent)
+        btnPlay.background = GradientDrawable().apply {
+            shape = GradientDrawable.OVAL
+            setColor(accent)
+        }
+        btnPlay.imageTintList = ColorStateList.valueOf(baseBg)
+        seek.progressDrawable = seekDrawable()
+        seek.thumbTintList = ColorStateList.valueOf(accent)
+        showList?.findViewById<ImageView>(R.id.ivHandle)?.imageTintList =
+            ColorStateList.valueOf(accent)
+        tabFolder.setTextColor(if (viewFavs) gray else accent)
+        tabFavs.setTextColor(if (viewFavs) accent else gray)
+    }
+
+    /** Barra di avanzamento ridisegnata col colore del tema. */
+    private fun seekDrawable(): Drawable {
+        val h = resources.getDimensionPixelSize(R.dimen.seek_thick)
+        val r = 4f * dp
+        fun shape(color: Int) = GradientDrawable().apply {
+            shape = GradientDrawable.RECTANGLE
+            cornerRadius = r
+            setColor(color)
+            setSize(1, h)
+        }
+        val bar = ClipDrawable(shape(accent), Gravity.START, ClipDrawable.HORIZONTAL)
+        return LayerDrawable(arrayOf(shape(0xFF2A2F38.toInt()), bar)).apply {
+            setId(0, android.R.id.background)
+            setId(1, android.R.id.progress)
+        }
+    }
 
     // ---------------------------------------------------------------- permessi e libreria
 
@@ -339,9 +414,10 @@ class MainActivity : Activity(), PlaybackService.Listener {
     private fun playFromList(pos: Int) {
         val s = svc ?: return
         val t = shown.getOrNull(pos) ?: return
-        if (s.current?.path == t.path) {
-            // riga già caricata (magari in pausa): riprende a suonare, non mette in pausa
-            if (!s.playing) s.play()
+        val qi = s.queue.indexOfFirst { it.path == t.path }
+        if (qi >= 0) {
+            // brano già in coda: se è quello corrente riprende, altrimenti parte subito
+            s.playAt(qi)
         } else {
             s.setQueue(shown, pos, true)
         }
@@ -374,6 +450,9 @@ class MainActivity : Activity(), PlaybackService.Listener {
         Favorites.toggle(this, t.path)
         loadFavs()
         heart.setImageResource(heartIcon(t))
+        heart.imageTintList = ColorStateList.valueOf(
+            if (t.path in favSet) accent else white
+        )
         heart.animate().scaleX(1.25f).scaleY(1.25f).setDuration(110).withEndAction {
             heart.animate().scaleX(1f).scaleY(1f).setDuration(110).start()
         }.start()
@@ -394,12 +473,14 @@ class MainActivity : Activity(), PlaybackService.Listener {
         tvTitle.text = title
         // dimensione base dalla risorsa dello schermo, ridotta solo se il titolo è molto lungo
         val base = resources.getDimension(R.dimen.title_sp) / resources.displayMetrics.scaledDensity
-        val f = when {
+        val len = when {
             title.length <= 14 -> 1.2f
             title.length <= 26 -> 1f
             else -> 0.8f
         }
-        tvTitle.setTextSize(TypedValue.COMPLEX_UNIT_SP, base * f)
+        // con la lista nascosta la parte centrale si allarga: titolo un po' più grande
+        val wide = if (listHidden) 1.12f else 1f
+        tvTitle.setTextSize(TypedValue.COMPLEX_UNIT_SP, base * len * wide)
         tvArtist.text = t?.artist ?: ""
 
         eq.setActive(s.playing)
@@ -412,6 +493,7 @@ class MainActivity : Activity(), PlaybackService.Listener {
         }
 
         btnPlay.setImageResource(if (s.playing) R.drawable.ic_pause else R.drawable.ic_play)
+        btnPlay.imageTintList = ColorStateList.valueOf(baseBg)
         disc.setSpinning(s.playing)
         if (s.cover !== lastCover) {
             lastCover = s.cover
@@ -419,6 +501,7 @@ class MainActivity : Activity(), PlaybackService.Listener {
             tint(s.cover)
         }
         heart.setImageResource(heartIcon(t))
+        heart.imageTintList = ColorStateList.valueOf(if (t != null && t.path in favSet) accent else white)
         btnShuffle.alpha = if (s.shuffle) 1f else 0.35f
         btnRepeat.setImageResource(if (s.repeat == 2) R.drawable.ic_repeat_one else R.drawable.ic_repeat)
         btnRepeat.alpha = if (s.repeat == 0) 0.35f else 1f
@@ -433,7 +516,7 @@ class MainActivity : Activity(), PlaybackService.Listener {
     /** Sfondo sfumato che prende il colore dalla copertina. */
     private fun tint(b: Bitmap?) {
         val target = if (b == null) {
-            0xFF0F2A24.toInt()
+            baseBg
         } else {
             val px = Bitmap.createScaledBitmap(b, 1, 1, true).getPixel(0, 0)
             val hsv = FloatArray(3)
@@ -452,6 +535,135 @@ class MainActivity : Activity(), PlaybackService.Listener {
             }
             start()
         }
+    }
+
+    // ---------------------------------------------------------------- pannello di destra
+
+    /**
+     * Nasconde o mostra la lista di destra con uno swipe orizzontale: quando è
+     * nascosta, disco e parte centrale si allargano e il titolo cresce.
+     */
+    private fun setListHidden(hide: Boolean) {
+        if (hide == listHidden) return
+        listHidden = hide
+        rightCol?.visibility = if (hide) View.GONE else View.VISIBLE
+        showList?.visibility = if (hide) View.VISIBLE else View.GONE
+        if (centerCol != null && discCol != null) {
+            val d = discCol!!.layoutParams as LinearLayout.LayoutParams
+            val c = centerCol!!.layoutParams as LinearLayout.LayoutParams
+            d.weight = if (hide) 4f else 3f
+            c.weight = if (hide) 8f else 5f
+            discCol!!.layoutParams = d
+            centerCol!!.layoutParams = c
+        }
+        render()
+    }
+
+    /**
+     * Swipe orizzontale: verso destra sulla lista per nasconderla, verso sinistra
+     * dal bordo destro (o tocco sulla linguetta) per riportarla.
+     */
+    override fun dispatchTouchEvent(ev: MotionEvent): Boolean {
+        if (rightCol != null && centerCol != null) {
+            when (ev.actionMasked) {
+                MotionEvent.ACTION_DOWN -> {
+                    downX = ev.x
+                    downY = ev.y
+                    downInList = !listHidden && ev.x >= (rightCol?.left ?: 0)
+                }
+                MotionEvent.ACTION_UP -> {
+                    val dx = ev.x - downX
+                    val dy = ev.y - downY
+                    val swipe = abs(dx) > 60f * dp && abs(dx) > abs(dy) * 1.8f
+                    if (swipe) {
+                        if (!listHidden && downInList) {
+                            setListHidden(true)
+                        } else if (listHidden && dx < 0f &&
+                            downX > resources.displayMetrics.widthPixels - 90f * dp
+                        ) {
+                            setListHidden(false)
+                        }
+                    }
+                }
+            }
+        }
+        return super.dispatchTouchEvent(ev)
+    }
+
+    // ---------------------------------------------------------------- impostazioni
+
+    /** Ingranaggio: tema con palette colori e scelta dell'uscita audio. */
+    private fun showSettings() {
+        val v = layoutInflater.inflate(R.layout.dialog_settings, null)
+        val accentPalette = v.findViewById<LinearLayout>(R.id.accentPalette)
+        val bgPalette = v.findViewById<LinearLayout>(R.id.bgPalette)
+        val outBox = v.findViewById<LinearLayout>(R.id.outputBox)
+
+        val dlg = AlertDialog.Builder(this, android.R.style.Theme_Material_Dialog_Alert)
+            .setView(v)
+            .setNegativeButton("Chiudi", null)
+            .create()
+
+        fun paintPalettes() {
+            accentPalette.removeAllViews()
+            for (c in Themes.ACCENTS) {
+                accentPalette.addView(swatch(c, c == accent) {
+                    Prefs.putInt(this, "accent", c)
+                    dlg.dismiss()
+                    recreate()
+                })
+            }
+            bgPalette.removeAllViews()
+            for (c in Themes.BACKGROUNDS) {
+                bgPalette.addView(swatch(c, c == baseBg) {
+                    Prefs.putInt(this, "bg", c)
+                    dlg.dismiss()
+                    recreate()
+                })
+            }
+        }
+
+        fun paintOutputs() {
+            outBox.removeAllViews()
+            val s = svc
+            val cur = s?.outputId ?: 0
+            for ((id, name) in s?.outputOptions() ?: listOf(0 to "Automatico (consigliato)")) {
+                val tv = TextView(this)
+                tv.text = (if (id == cur) "●  " else "○  ") + name
+                tv.setTextColor(if (id == cur) accent else gray)
+                tv.setTextSize(TypedValue.COMPLEX_UNIT_SP, 16f)
+                tv.typeface = listFont
+                tv.setPadding(0, (10 * dp).toInt(), 0, (10 * dp).toInt())
+                tv.setOnClickListener {
+                    s?.setOutput(id)
+                    paintOutputs()
+                }
+                outBox.addView(tv)
+            }
+        }
+
+        paintPalettes()
+        paintOutputs()
+        dlg.setOnShowListener {
+            val w = (resources.displayMetrics.widthPixels * 0.55f).toInt()
+            dlg.window?.setLayout(w, ViewGroup.LayoutParams.WRAP_CONTENT)
+        }
+        dlg.show()
+    }
+
+    private fun swatch(color: Int, selected: Boolean, tap: () -> Unit): View {
+        val s = (52 * dp).toInt()
+        val v = View(this)
+        val lp = LinearLayout.LayoutParams(s, s)
+        lp.marginEnd = (12 * dp).toInt()
+        v.layoutParams = lp
+        v.background = GradientDrawable().apply {
+            shape = GradientDrawable.OVAL
+            setColor(color)
+            if (selected) setStroke((3 * dp).toInt(), white)
+        }
+        v.setOnClickListener { tap() }
+        return v
     }
 
     // ---------------------------------------------------------------- striscia miniature
@@ -485,11 +697,12 @@ class MainActivity : Activity(), PlaybackService.Listener {
             val v = layoutInflater.inflate(R.layout.item_thumb, stripBox, false)
             v.findViewById<TextView>(R.id.thTitle).apply {
                 text = q[i].title
-                typeface = condTypeface
+                typeface = listFont
             }
             v.setOnClickListener {
                 stripTouchAt = 0L
-                svc?.playIndex(i)
+                // tocco sulla copertina: il brano parte subito, mai solo selezionato
+                svc?.playAt(i)
             }
             stripBox.addView(v)
         }
@@ -500,7 +713,7 @@ class MainActivity : Activity(), PlaybackService.Listener {
         }
     }
 
-    /** Evidenzia il brano in esecuzione: bordo verde, titolo verde e sottolineato. */
+    /** Evidenzia il brano in esecuzione: bordo, titolo colorato e sottolineato. */
     private fun markStrip(cur: Int) {
         for (k in 0 until stripBox.childCount) {
             val v = stripBox.getChildAt(k)
@@ -627,18 +840,20 @@ class MainActivity : Activity(), PlaybackService.Listener {
                 // il brano in esecuzione è sottolineato
                 paintFlags = if (cur) paintFlags or Paint.UNDERLINE_TEXT_FLAG
                 else paintFlags and Paint.UNDERLINE_TEXT_FLAG.inv()
-                typeface = condTypeface
+                typeface = listFont
                 // selected = testo che scorre quando non entra nella riga
                 isSelected = true
             }
             v.findViewById<TextView>(R.id.itArtist).apply {
                 text = t.artist
-                typeface = condTypeface
+                typeface = listFont
                 isSelected = true
             }
             v.findViewById<ImageView>(R.id.itFav).visibility =
                 if (t.path in favSet) View.VISIBLE else View.GONE
-            v.setBackgroundColor(if (cur) 0x223DDC97 else 0)
+            v.setBackgroundColor(
+                if (cur) (accent and 0x00FFFFFF) or 0x22000000 else 0
+            )
             return v
         }
     }

@@ -52,6 +52,12 @@ class EqView @JvmOverloads constructor(ctx: Context, attrs: AttributeSet? = null
         if (isAttachedToWindow) post(tick)
     }
 
+    /** Colore del tema scelto dalle impostazioni. */
+    fun setAccent(c: Int) {
+        paint.color = c
+        invalidate()
+    }
+
     override fun onAttachedToWindow() {
         super.onAttachedToWindow()
         if (active) post(tick)

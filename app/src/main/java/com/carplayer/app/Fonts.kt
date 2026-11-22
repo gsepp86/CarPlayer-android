@@ -6,11 +6,13 @@ import android.graphics.Typeface
 /**
  * Caratteri dagli asset, con ripiego sul sistema se mancano:
  * - display: Orbitron Bold (robotico) per titolo, orologio, stato
- * - condensed: Barlow Condensed Bold per lista, schede e didascalie (licenza OFL)
+ * - legible: Barlow Bold per lista, schede e didascalie. È il fratello "tondo" del
+ *   Barlow Condensed usato prima: stessa famiglia (licenza OFL), ma largo e aperto,
+ *   quindi molto più leggibile da lontano sul cruscotto.
  */
 object Fonts {
     private var display: Typeface? = null
-    private var condensed: Typeface? = null
+    private var legible: Typeface? = null
 
     fun display(ctx: Context): Typeface {
         display?.let { return it }
@@ -23,14 +25,14 @@ object Fonts {
         return t
     }
 
-    fun condensed(ctx: Context): Typeface {
-        condensed?.let { return it }
+    fun legible(ctx: Context): Typeface {
+        legible?.let { return it }
         val t = try {
-            Typeface.createFromAsset(ctx.applicationContext.assets, "fonts/BarlowCondensed-Bold.ttf")
+            Typeface.createFromAsset(ctx.applicationContext.assets, "fonts/Barlow-Bold.ttf")
         } catch (e: Exception) {
-            Typeface.create("sans-serif-condensed", Typeface.BOLD)
+            Typeface.create("sans-serif", Typeface.BOLD)
         }
-        condensed = t
+        legible = t
         return t
     }
 }

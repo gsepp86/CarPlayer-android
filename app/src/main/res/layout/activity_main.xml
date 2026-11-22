@@ -20,6 +20,7 @@
 
         <!-- SINISTRA: disco -->
         <FrameLayout
+            android:id="@+id/discCol"
             android:layout_width="0dp"
             android:layout_height="match_parent"
             android:layout_weight="3"
@@ -33,6 +34,7 @@
 
         <!-- CENTRO: titolo, cuore, barra, comandi, striscia miniature -->
         <LinearLayout
+            android:id="@+id/centerCol"
             android:layout_width="0dp"
             android:layout_height="match_parent"
             android:layout_weight="5"
@@ -192,6 +194,7 @@
 
         <!-- DESTRA: cartella / preferiti + lista brani -->
         <LinearLayout
+            android:id="@+id/rightCol"
             android:layout_width="0dp"
             android:layout_height="match_parent"
             android:layout_weight="3"
@@ -252,6 +255,24 @@
                     android:textSize="@dimen/tab_sp"
                     android:visibility="gone" />
             </FrameLayout>
+        </LinearLayout>
+
+        <!-- Linguetta per riportare la lista dopo averla nascosta con lo swipe -->
+        <LinearLayout
+            android:id="@+id/showList"
+            android:layout_width="@dimen/handle_w"
+            android:layout_height="match_parent"
+            android:background="?android:attr/selectableItemBackground"
+            android:gravity="center"
+            android:orientation="vertical"
+            android:visibility="gone">
+
+            <ImageView
+                android:id="@+id/ivHandle"
+                android:layout_width="24dp"
+                android:layout_height="24dp"
+                android:src="@drawable/ic_chevron_left"
+                android:tint="#FFFFFF" />
         </LinearLayout>
     </LinearLayout>
 </LinearLayout>

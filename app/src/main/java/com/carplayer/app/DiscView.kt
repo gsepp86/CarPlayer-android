@@ -36,6 +36,7 @@ class DiscView @JvmOverloads constructor(ctx: Context, attrs: AttributeSet? = nu
         color = 0xFF2B2E35.toInt()
     }
     private val label = Paint(Paint.ANTI_ALIAS_FLAG)
+    private var accent = 0xFF3DDC97.toInt()
 
     private val note = ctx.getDrawable(R.drawable.ic_note)
     private var cover: Bitmap? = null
@@ -63,6 +64,20 @@ class DiscView @JvmOverloads constructor(ctx: Context, attrs: AttributeSet? = nu
     fun setSpinning(on: Boolean) {
         spinning = on
         applySpin()
+    }
+
+    /** Colore del tema scelto dalle impostazioni (disco senza copertina). */
+    fun setAccent(c: Int) {
+        accent = c
+        rebuild()
+        invalidate()
+    }
+
+    private fun darker(c: Int): Int {
+        val hsv = FloatArray(3)
+        Color.colorToHSV(c, hsv)
+        hsv[2] = (hsv[2] * 0.45f).coerceAtLeast(0.08f)
+        return Color.HSVToColor(hsv)
     }
 
     private fun applySpin() {
@@ -104,7 +119,7 @@ class DiscView @JvmOverloads constructor(ctx: Context, attrs: AttributeSet? = nu
         } else {
             label.shader = RadialGradient(
                 cx, cy, rc,
-                intArrayOf(Color.parseColor("#3DDC97"), Color.parseColor("#17604A")),
+                intArrayOf(accent, darker(accent)),
                 null, Shader.TileMode.CLAMP
             )
         }

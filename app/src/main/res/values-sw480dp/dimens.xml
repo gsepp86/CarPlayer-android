@@ -30,4 +30,6 @@
     <dimen name="row_artist_sp">20sp</dimen>
     <dimen name="row_min_h">76dp</dimen>
     <dimen name="gap">8dp</dimen>
+    <dimen name="gear">32dp</dimen>
+    <dimen name="handle_w">22dp</dimen>
 </resources>
