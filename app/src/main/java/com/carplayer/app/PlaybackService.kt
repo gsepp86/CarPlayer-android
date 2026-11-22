@@ -26,9 +26,9 @@ import java.util.concurrent.Executors
  * Motore di riproduzione. Vive in background (servizio in primo piano) così la musica
  * continua anche con il navigatore aperto, e risponde ai tasti del volante (MediaSession).
  *
- * L'audio passa da [PcmEngine] (MediaCodec + AudioTrack), lo stesso percorso dei lettori
- * del Play Store: su queste autoradio MediaPlayer resta muto. Se il PCM non parte,
- * il servizio ripiega da solo su MediaPlayer.
+ * L'audio passa da [ExoEngine] (AndroidX Media3 ExoPlayer): decodifica e uscita su
+ * thread propri, nessun blocco dell'interfaccia e lo stesso percorso PCM dei lettori
+ * del Play Store, che su queste autoradio si sente.
  */
 class PlaybackService : Service() {
 
@@ -70,8 +70,6 @@ class PlaybackService : Service() {
         }
 
     private var engine: PlayerEngine? = null
-    private var engineKind = ENGINE_AUTO
-    private var pcmBroken = false
     private var prepared = false
     private var loading = false
     private var pendingPlay = false
@@ -101,7 +99,6 @@ class PlaybackService : Service() {
         audio = getSystemService(Context.AUDIO_SERVICE) as AudioManager
         route = AudioRoute(this)
         route.setSink(Prefs.int(this, "outSink"))
-        engineKind = Prefs.int(this, "engine", ENGINE_AUTO)
         nm = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         shuffle = Prefs.bool(this, "shuffle")
         repeat = Prefs.int(this, "repeat")
@@ -289,19 +286,6 @@ class PlaybackService : Service() {
         return label
     }
 
-    /** Motore scelto: [ENGINE_AUTO], [ENGINE_MP] o [ENGINE_PCM]. */
-    val engineMode: Int get() = engineKind
-
-    fun setEngine(kind: Int) {
-        if (engineKind == kind) return
-        engineKind = kind
-        pcmBroken = false
-        Prefs.putInt(this, "engine", kind)
-        if (current == null) return
-        val pos = positionMs
-        loadTrack(index, playing, pos)
-    }
-
     fun toggleShuffle() {
         shuffle = !shuffle
         upcoming = -1
@@ -337,20 +321,20 @@ class PlaybackService : Service() {
     }
 
     private fun startEngine(path: String, startMs: Int) {
-        engine?.release()
-        engine = null
         loading = true
         prepared = false
-        val usePcm = when (engineKind) {
-            ENGINE_MP -> false
-            ENGINE_PCM -> Build.VERSION.SDK_INT >= 23
-            else -> Build.VERSION.SDK_INT >= 23 && !pcmBroken
+        // un solo ExoPlayer per tutta la sessione: cambiare brano è un semplice setMediaItem,
+        // senza creare/rilasciare audio sul thread dell'interfaccia
+        var e = engine
+        if (e !is ExoEngine) {
+            e?.release()
+            val n = ExoEngine(this)
+            n.onPrepared = { onPrepared() }
+            n.onCompletion = { onCompleted() }
+            n.onError = { msg -> handleEngineError(msg) }
+            engine = n
+            e = n
         }
-        val e: PlayerEngine = if (usePcm) PcmEngine() else MpEngine(this)
-        e.onPrepared = { onPrepared() }
-        e.onCompletion = { onCompleted() }
-        e.onError = { msg -> handleEngineError(msg) }
-        engine = e
         e.setVolume(1f)
         route.chosen()?.let { e.setPreferredDevice(it) }
         try {
@@ -398,21 +382,9 @@ class PlaybackService : Service() {
         loadTrack(nx, true)
     }
 
-    /**
-     * Errore del motore. Se era il PCM e siamo in automatico, si passa a MediaPlayer
-     * e si riprova lo stesso brano dallo stesso punto.
-     */
+    /** Errore del motore: si registra per la diagnostica e si passa al brano dopo. */
     private fun handleEngineError(msg: String) {
         lastError = msg
-        if (engine is PcmEngine && engineKind == ENGINE_AUTO && !pcmBroken) {
-            pcmBroken = true
-            val t = current
-            if (t != null) {
-                startEngine(t.path, pendingPos)
-                pushState()
-                return
-            }
-        }
         loading = false
         failTrack()
     }
@@ -615,10 +587,5 @@ class PlaybackService : Service() {
         const val ACTION_TOGGLE = "com.carplayer.app.TOGGLE"
         const val ACTION_NEXT = "com.carplayer.app.NEXT"
         const val ACTION_PREV = "com.carplayer.app.PREV"
-
-        /** PCM prima, MediaPlayer se il PCM non parte. */
-        const val ENGINE_AUTO = 0
-        const val ENGINE_MP = 1
-        const val ENGINE_PCM = 2
     }
 }

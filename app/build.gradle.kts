@@ -11,8 +11,8 @@ android {
         applicationId = "com.carplayer.app"
         minSdk = 21
         targetSdk = 34
-        versionCode = 8
-        versionName = "1.7"
+        versionCode = 9
+        versionName = "1.8"
     }
 
     buildTypes {
@@ -38,4 +38,8 @@ android {
     }
 }
 
-// Nessuna libreria esterna: solo API Android native, APK minuscolo.
+dependencies {
+    // ExoPlayer (Media3): decodifica e uscita audio su thread propri.
+    // Sostituisce il vecchio motore PCM scritto a mano, che bloccava l'interfaccia.
+    implementation("androidx.media3:media3-exoplayer:1.4.1")
+}

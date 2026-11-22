@@ -605,13 +605,11 @@ class MainActivity : Activity(), PlaybackService.Listener {
         val accentPalette = v.findViewById<LinearLayout>(R.id.accentPalette)
         val bgPalette = v.findViewById<LinearLayout>(R.id.bgPalette)
         val outBox = v.findViewById<LinearLayout>(R.id.outputBox)
-        val engineBox = v.findViewById<LinearLayout>(R.id.engineBox)
         val diag = v.findViewById<TextView>(R.id.audioDiag)
 
         // modifiche in sospeso: entrano in vigore solo toccando "Salva"
         var newAccent = accent
         var newBg = baseBg
-        var newEngine = svc?.engineMode ?: PlaybackService.ENGINE_AUTO
         var newOutput = svc?.outputId ?: 0
 
         val dlg = AlertDialog.Builder(this, android.R.style.Theme_Material_Dialog_Alert)
@@ -664,42 +662,13 @@ class MainActivity : Activity(), PlaybackService.Listener {
                 AudioManager.MODE_RINGTONE -> "suoneria"
                 else -> "normale"
             }
-            val eng = when (newEngine) {
-                PlaybackService.ENGINE_MP -> "MediaPlayer"
-                PlaybackService.ENGINE_PCM -> "PCM"
-                else -> "auto"
-            }
             val err = s?.lastError?.takeIf { it.isNotBlank() }
-            diag.text = "Volume $vol/$max · modo $mode · motore $eng\n" +
+            diag.text = "Volume $vol/$max · modo $mode · motore ExoPlayer\n" +
                 (if (err != null) "Ultimo errore: $err" else "Nessun errore del motore")
-        }
-
-        fun paintEngine() {
-            engineBox.removeAllViews()
-            val opts = listOf(
-                PlaybackService.ENGINE_AUTO to "Automatico (PCM, consigliato)",
-                PlaybackService.ENGINE_MP to "MediaPlayer",
-                PlaybackService.ENGINE_PCM to "PCM forzato"
-            )
-            for ((id, name) in opts) {
-                val tv = TextView(this)
-                tv.text = (if (id == newEngine) "●  " else "○  ") + name
-                tv.setTextColor(if (id == newEngine) newAccent else gray)
-                tv.setTextSize(TypedValue.COMPLEX_UNIT_SP, 16f)
-                tv.typeface = listFont
-                tv.setPadding(0, (8 * dp).toInt(), 0, (8 * dp).toInt())
-                tv.setOnClickListener {
-                    newEngine = id
-                    paintEngine()
-                    paintDiag()
-                }
-                engineBox.addView(tv)
-            }
         }
 
         paintPalettes()
         paintOutputs()
-        paintEngine()
         paintDiag()
         v.findViewById<TextView>(R.id.btnTest).setOnClickListener {
             playTestTone()
@@ -708,11 +677,10 @@ class MainActivity : Activity(), PlaybackService.Listener {
         dlg.setOnShowListener {
             val w = (resources.displayMetrics.widthPixels * 0.55f).toInt()
             dlg.window?.setLayout(w, ViewGroup.LayoutParams.WRAP_CONTENT)
-            // "Salva": memorizza tema, motore e uscita scelti
+            // "Salva": memorizza tema e uscita scelti
             dlg.getButton(android.content.DialogInterface.BUTTON_POSITIVE).setOnClickListener {
                 Prefs.putInt(this, "accent", newAccent)
                 Prefs.putInt(this, "bg", newBg)
-                svc?.setEngine(newEngine)
                 svc?.setOutput(newOutput)
                 dlg.dismiss()
                 if (newAccent != accent || newBg != baseBg) recreate()
