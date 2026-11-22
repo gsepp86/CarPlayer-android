@@ -26,4 +26,11 @@ object Favorites {
         Prefs.putStr(c, "favs", l.joinToString("\n"))
         return added
     }
+
+    /** Aggiunge più brani in un colpo solo (ripristino della playlist). */
+    fun addAll(c: Context, paths: List<String>) {
+        val l = all(c).toMutableList()
+        for (p in paths) if (p !in l) l.add(p)
+        Prefs.putStr(c, "favs", l.joinToString("\n"))
+    }
 }

@@ -2,14 +2,16 @@ package com.carplayer.app
 
 import android.content.Context
 
+/** Sfondo a due colori, disegnato in diagonale sulla schermata principale. */
+data class BgStyle(val start: Int, val end: Int)
+
 /**
- * Palette dei temi: il colore principale (accenti, evidenziazioni, barra) e il
- * colore di sfondo si scelgono dall'ingranaggio e vengono ricordati.
+ * Palette dei temi: il colore principale (accenti, evidenziazioni, barra) e lo
+ * sfondo sfumato si scelgono dall'ingranaggio e vengono ricordati.
  */
 object Themes {
 
     val DEFAULT_ACCENT = 0xFF3DDC97.toInt()
-    val DEFAULT_BG = 0xFF0A0C10.toInt()
 
     /** Colori principali: vivaci, ben distinguibili anche di giorno in auto. */
     val ACCENTS = intArrayOf(
@@ -30,17 +32,21 @@ object Themes {
         0xFF90A4AE.toInt()  // grigio
     )
 
-    /** Sfondi scuri: il testo bianco resta sempre leggibile. */
-    val BACKGROUNDS = intArrayOf(
-        0xFF0A0C10.toInt(), // nero
-        0xFF12141C.toInt(), // ardesia
-        0xFF0C1620.toInt(), // blu notte
-        0xFF101A14.toInt(), // verde scuro
-        0xFF141020.toInt(), // viola scuro
-        0xFF1A1210.toInt()  // marrone
+    /** Sfondi sfumati, abbastanza scuri da lasciare leggibile il testo bianco. */
+    val BACKGROUNDS = listOf(
+        BgStyle(0xFF161C28.toInt(), 0xFF07090D.toInt()), // notte
+        BgStyle(0xFF2C1B4F.toInt(), 0xFF0B0714.toInt()), // viola
+        BgStyle(0xFF0B2E3A.toInt(), 0xFF040E13.toInt()), // oceano
+        BgStyle(0xFF3A1A1C.toInt(), 0xFF0F0607.toInt()), // rosso
+        BgStyle(0xFF1B3A2A.toInt(), 0xFF060F0A.toInt()), // bosco
+        BgStyle(0xFF3A2A10.toInt(), 0xFF120C04.toInt()), // ambra
+        BgStyle(0xFF1A2340.toInt(), 0xFF080B14.toInt())  // blu
     )
 
     fun accent(c: Context): Int = Prefs.int(c, "accent", DEFAULT_ACCENT)
 
-    fun bg(c: Context): Int = Prefs.int(c, "bg", DEFAULT_BG)
+    fun bgStyleIndex(c: Context): Int =
+        Prefs.int(c, "bgStyle", 0).coerceIn(0, BACKGROUNDS.lastIndex)
+
+    fun bgStyle(c: Context): BgStyle = BACKGROUNDS[bgStyleIndex(c)]
 }

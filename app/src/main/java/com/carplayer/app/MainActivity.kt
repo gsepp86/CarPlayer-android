@@ -15,6 +15,7 @@ import android.graphics.Bitmap
 import android.graphics.Color
 import android.graphics.Paint
 import android.graphics.drawable.ClipDrawable
+import android.graphics.drawable.ColorDrawable
 import android.graphics.drawable.Drawable
 import android.graphics.drawable.GradientDrawable
 import android.graphics.drawable.LayerDrawable
@@ -46,6 +47,7 @@ import android.widget.ImageButton
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.ListView
+import android.widget.ScrollView
 import android.widget.SeekBar
 import android.widget.TextView
 import java.util.concurrent.Executors
@@ -61,6 +63,10 @@ class MainActivity : Activity(), PlaybackService.Listener {
     private val gray = 0xFF9AA3AF.toInt()
     private val heartRed = 0xFFFF4D6D.toInt()
     private var baseBg = 0
+    private var bgStyle = 0
+    private var styleStart = 0
+    private val reqExport = 501
+    private val reqImport = 502
 
     private var svc: PlaybackService? = null
     private var library: List<Track> = emptyList()
@@ -156,8 +162,11 @@ class MainActivity : Activity(), PlaybackService.Listener {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         accent = Themes.accent(this)
-        baseBg = Themes.bg(this)
-        bgColor = baseBg
+        bgStyle = Themes.bgStyleIndex(this)
+        val style = Themes.BACKGROUNDS[bgStyle]
+        baseBg = style.end
+        bgColor = style.start
+        styleStart = style.start
         setContentView(R.layout.activity_main)
 
         root = findViewById(R.id.root)
@@ -201,6 +210,7 @@ class MainActivity : Activity(), PlaybackService.Listener {
             if (resources.getBoolean(R.bool.show_date)) View.VISIBLE else View.GONE
 
         list.adapter = adapter
+        list.dividerHeight = (1 * dp).toInt().coerceAtLeast(1)
         list.setOnItemClickListener { _, _, pos, _ -> playFromList(pos) }
         // le righe non devono prendere il focus: il tocco deve arrivare alla lista
         list.setItemsCanFocus(false)
@@ -298,6 +308,10 @@ class MainActivity : Activity(), PlaybackService.Listener {
             ColorStateList.valueOf(accent)
         tabFolder.setTextColor(if (viewFavs) gray else accent)
         tabFavs.setTextColor(heartRed)
+        // linea sottile tra le tracce, nel colore del tema
+        list.divider = ColorDrawable(
+            Color.argb(45, Color.red(accent), Color.green(accent), Color.blue(accent))
+        )
     }
 
     /** Barra di avanzamento ridisegnata col colore del tema. */
@@ -440,18 +454,87 @@ class MainActivity : Activity(), PlaybackService.Listener {
         refreshList()
     }
 
+    /** Scelta cartella: ogni voce ha numero, icona del disco, nome e numero di brani. */
     private fun chooseFolder() {
         val fs = Library.folders(library)
         if (fs.isEmpty()) return
-        val names = fs.map { "${Library.label(it.first)}   (${it.second})" }.toTypedArray()
-        AlertDialog.Builder(this, android.R.style.Theme_Material_Dialog_Alert)
-            .setTitle("Scegli cartella")
-            .setItems(names) { _, i ->
-                folder = fs[i].first
+        var dlg: AlertDialog? = null
+        val box = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(0, (6 * dp).toInt(), 0, (6 * dp).toInt())
+        }
+        fs.forEachIndexed { i, entry ->
+            val path = entry.first
+            val count = entry.second
+            val row = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+                setPadding((16 * dp).toInt(), (9 * dp).toInt(), (16 * dp).toInt(), (9 * dp).toInt())
+                setBackgroundResource(R.drawable.bg_row)
+            }
+            // numero assegnato dall'app, per riconoscere subito la cartella
+            val num = TextView(this).apply {
+                text = (i + 1).toString()
+                gravity = Gravity.CENTER
+                setTextColor(baseBg)
+                textSize = 17f
+                typeface = listFont
+                background = GradientDrawable().apply {
+                    shape = GradientDrawable.OVAL
+                    setColor(accent)
+                }
+            }
+            row.addView(num, LinearLayout.LayoutParams((30 * dp).toInt(), (30 * dp).toInt()))
+
+            val disc = ImageView(this).apply {
+                setImageResource(R.drawable.ic_disc)
+                imageTintList = ColorStateList.valueOf(accent)
+            }
+            val dl = LinearLayout.LayoutParams((26 * dp).toInt(), (26 * dp).toInt())
+            dl.marginStart = (12 * dp).toInt()
+            dl.marginEnd = (10 * dp).toInt()
+            row.addView(disc, dl)
+
+            val name = TextView(this).apply {
+                text = Library.label(path)
+                setTextColor(white)
+                textSize = 18f
+                typeface = listFont
+                maxLines = 1
+                ellipsize = android.text.TextUtils.TruncateAt.END
+            }
+            row.addView(name, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+
+            val cnt = TextView(this).apply {
+                text = "($count)"
+                setTextColor(gray)
+                textSize = 15f
+                typeface = listFont
+            }
+            row.addView(cnt)
+
+            row.setOnClickListener {
+                folder = path
                 Prefs.putStr(this, "folder", folder)
                 refreshList()
+                dlg?.dismiss()
             }
-            .show()
+            box.addView(row)
+        }
+        val scroll = ScrollView(this).apply { addView(box) }
+        val d = AlertDialog.Builder(this, android.R.style.Theme_Material_Dialog_Alert)
+            .setTitle("Scegli cartella")
+            .setView(scroll)
+            .setNegativeButton("Chiudi", null)
+            .create()
+        dlg = d
+        d.setOnShowListener {
+            d.window?.setLayout(
+                (resources.displayMetrics.widthPixels * 0.52f).toInt(),
+                (resources.displayMetrics.heightPixels * 0.72f).toInt()
+            )
+        }
+        d.show()
     }
 
     // ---------------------------------------------------------------- preferiti
@@ -527,14 +610,14 @@ class MainActivity : Activity(), PlaybackService.Listener {
     /** Sfondo sfumato che prende il colore dalla copertina. */
     private fun tint(b: Bitmap?) {
         val target = if (b == null) {
-            baseBg
+            styleStart
         } else {
             val px = Bitmap.createScaledBitmap(b, 1, 1, true).getPixel(0, 0)
             val hsv = FloatArray(3)
             Color.colorToHSV(px, hsv)
             hsv[1] = min(hsv[1], 0.6f)
             hsv[2] = 0.30f
-            Color.HSVToColor(hsv)
+            mix(Color.HSVToColor(hsv), styleStart, 0.5f)
         }
         ValueAnimator.ofObject(ArgbEvaluator(), bgColor, target).apply {
             duration = 600
@@ -594,6 +677,11 @@ class MainActivity : Activity(), PlaybackService.Listener {
                         ) {
                             setListHidden(false)
                         }
+                    } else if (!listHidden && !downInList &&
+                        abs(dx) < 14f * dp && abs(dy) < 14f * dp
+                    ) {
+                        // tocco fuori dal pannello della lista: la tendina si chiude
+                        setListHidden(true)
                     }
                 }
             }
@@ -613,7 +701,7 @@ class MainActivity : Activity(), PlaybackService.Listener {
 
         // modifiche in sospeso: entrano in vigore solo toccando "Salva"
         var newAccent = accent
-        var newBg = baseBg
+        var newBgStyle = bgStyle
         var newOutput = svc?.outputId ?: 0
 
         val dlg = AlertDialog.Builder(this, android.R.style.Theme_Material_Dialog_Alert)
@@ -631,9 +719,9 @@ class MainActivity : Activity(), PlaybackService.Listener {
                 })
             }
             bgPalette.removeAllViews()
-            for (c in Themes.BACKGROUNDS) {
-                bgPalette.addView(swatch(c, c == newBg) {
-                    newBg = c
+            for ((i, st) in Themes.BACKGROUNDS.withIndex()) {
+                bgPalette.addView(bgSwatch(st, i == newBgStyle) {
+                    newBgStyle = i
                     paintPalettes()
                 })
             }
@@ -680,6 +768,14 @@ class MainActivity : Activity(), PlaybackService.Listener {
             val line = "\n" + probeTrack(t)
             runOnUiThread { diag.append(line) }
         }.start()
+        v.findViewById<TextView>(R.id.btnExport).setOnClickListener {
+            dlg.dismiss()
+            exportFavorites()
+        }
+        v.findViewById<TextView>(R.id.btnImport).setOnClickListener {
+            dlg.dismiss()
+            importFavorites()
+        }
         v.findViewById<TextView>(R.id.btnTest).setOnClickListener {
             playTestTone()
             diag.postDelayed({ paintDiag() }, 300)
@@ -690,10 +786,10 @@ class MainActivity : Activity(), PlaybackService.Listener {
             // "Salva": memorizza tema e uscita scelti
             dlg.getButton(android.content.DialogInterface.BUTTON_POSITIVE).setOnClickListener {
                 Prefs.putInt(this, "accent", newAccent)
-                Prefs.putInt(this, "bg", newBg)
+                Prefs.putInt(this, "bgStyle", newBgStyle)
                 svc?.setOutput(newOutput)
                 dlg.dismiss()
-                if (newAccent != accent || newBg != baseBg) recreate()
+                if (newAccent != accent || newBgStyle != bgStyle) recreate()
             }
         }
         dlg.show()
@@ -788,6 +884,106 @@ class MainActivity : Activity(), PlaybackService.Listener {
         }
         v.setOnClickListener { tap() }
         return v
+    }
+
+    // ---------------------------------------------------------------- sfondi e playlist
+
+    /** Campione di sfondo sfumato nella palette delle impostazioni. */
+    private fun bgSwatch(st: BgStyle, selected: Boolean, tap: () -> Unit): View {
+        val v = View(this)
+        val lp = LinearLayout.LayoutParams((60 * dp).toInt(), (50 * dp).toInt())
+        lp.marginEnd = (10 * dp).toInt()
+        v.layoutParams = lp
+        v.background = GradientDrawable(
+            GradientDrawable.Orientation.TL_BR, intArrayOf(st.start, st.end)
+        ).apply {
+            cornerRadius = 10 * dp
+            if (selected) setStroke((3 * dp).toInt(), white)
+        }
+        v.setOnClickListener { tap() }
+        return v
+    }
+
+    /** Salva i preferiti in un file .m3u scelto dall'utente, recuperabile dopo la disinstallazione. */
+    private fun exportFavorites() {
+        val i = Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
+            addCategory(Intent.CATEGORY_OPENABLE)
+            type = "audio/x-mpegurl"
+            putExtra(Intent.EXTRA_TITLE, "CarPlayer-preferiti.m3u")
+        }
+        try {
+            startActivityForResult(i, reqExport)
+        } catch (e: Exception) {
+            toast("Nessuna app per salvare il file")
+        }
+    }
+
+    /** Ripristina i preferiti da un file .m3u, tenendo solo i brani presenti nella libreria. */
+    private fun importFavorites() {
+        val i = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+            addCategory(Intent.CATEGORY_OPENABLE)
+            type = "*/*"
+        }
+        try {
+            startActivityForResult(i, reqImport)
+        } catch (e: Exception) {
+            toast("Nessuna app per aprire il file")
+        }
+    }
+
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (resultCode != RESULT_OK) return
+        val uri = data?.data ?: return
+        when (requestCode) {
+            reqExport -> Thread {
+                val sb = StringBuilder("#EXTM3U\n# CarPlayer - playlist dei preferiti\n")
+                for (p in Favorites.all(this@MainActivity)) sb.append(p).append('\n')
+                val ok = try {
+                    contentResolver.openOutputStream(uri, "wt")?.use {
+                        it.write(sb.toString().toByteArray())
+                    }
+                    true
+                } catch (e: Exception) {
+                    false
+                }
+                runOnUiThread {
+                    toast(if (ok) "Playlist dei cuori salvata" else "Salvataggio non riuscito")
+                }
+            }.start()
+
+            reqImport -> Thread {
+                val lines = try {
+                    contentResolver.openInputStream(uri)?.bufferedReader()?.use { it.readLines() }
+                        ?: emptyList()
+                } catch (e: Exception) {
+                    emptyList()
+                }
+                val lib = library
+                val wanted = lines.map { it.trim() }
+                    .filter { it.isNotEmpty() && !it.startsWith("#") }
+                    .filter { p -> lib.any { it.path == p } }
+                Favorites.addAll(this@MainActivity, wanted)
+                runOnUiThread {
+                    loadFavs()
+                    refreshList()
+                    toast("Ripristinati " + wanted.size + " preferiti")
+                }
+            }.start()
+        }
+    }
+
+    private fun toast(s: String) =
+        android.widget.Toast.makeText(this, s, android.widget.Toast.LENGTH_SHORT).show()
+
+    /** Mescola due colori: tiene il gradiente scelto anche con la tinta della copertina. */
+    private fun mix(a: Int, b: Int, f: Float): Int {
+        fun ch(x: Int, y: Int) = (x + (y - x) * f).toInt().coerceIn(0, 255)
+        return Color.rgb(
+            ch(Color.red(a), Color.red(b)),
+            ch(Color.green(a), Color.green(b)),
+            ch(Color.blue(a), Color.blue(b))
+        )
     }
 
     // ---------------------------------------------------------------- striscia miniature
