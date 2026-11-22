@@ -181,8 +181,31 @@
             android:layout_height="wrap_content"
             android:layout_marginTop="8dp"
             android:lineSpacingExtra="4dp"
-            android:text="Re riprogramma CarPlayer CP\ncreato da Peppe CP in collaborazione con la IA"
+            android:text="CarPlayer CP\ncreato da Peppe CP in collaborazione con IA"
             android:textColor="#FFFFFF"
             android:textSize="16sp" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:lineSpacingExtra="4dp"
+            android:text="Se vuoi contribuire al mio lavoro, qui sotto trovi il pulsante per offrirmi un piccolo regalo: apprezzo il gesto ;-)"
+            android:textColor="@color/text_soft"
+            android:textSize="14sp" />
+
+        <TextView
+            android:id="@+id/btnDonate"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:background="?android:attr/selectableItemBackground"
+            android:paddingTop="8dp"
+            android:paddingBottom="8dp"
+            android:paddingEnd="16dp"
+            android:text="Contribuisci via PayPal"
+            android:textColor="@color/accent"
+            android:textSize="16sp"
+            android:textStyle="bold" />
     </LinearLayout>
 </ScrollView>

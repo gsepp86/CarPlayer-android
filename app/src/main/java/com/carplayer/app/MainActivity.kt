@@ -776,6 +776,13 @@ class MainActivity : Activity(), PlaybackService.Listener {
             dlg.dismiss()
             importFavorites()
         }
+        v.findViewById<TextView>(R.id.btnDonate).setOnClickListener {
+            try {
+                startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://paypal.me/PeppeCP")))
+            } catch (e: Exception) {
+                toast("Nessun browser disponibile")
+            }
+        }
         v.findViewById<TextView>(R.id.btnTest).setOnClickListener {
             playTestTone()
             diag.postDelayed({ paintDiag() }, 300)
