@@ -14,11 +14,8 @@ import android.content.res.ColorStateList
 import android.graphics.Bitmap
 import android.graphics.Color
 import android.graphics.Paint
-import android.graphics.drawable.ClipDrawable
 import android.graphics.drawable.ColorDrawable
-import android.graphics.drawable.Drawable
 import android.graphics.drawable.GradientDrawable
-import android.graphics.drawable.LayerDrawable
 import android.media.AudioAttributes
 import android.media.AudioFormat
 import android.media.AudioManager
@@ -76,6 +73,9 @@ class MainActivity : Activity(), PlaybackService.Listener {
     private var favSet: Set<String> = emptySet()
     private var restored = false
     private var userSeeking = false
+    // dopo un salto la barra resta ferma sul punto scelto finché il motore non ci arriva
+    private var seekTarget = -1
+    private var seekTargetAt = 0L
     private var lastCover: Bitmap? = null
     private var lastShownPath: String? = null
     private var bgColor = 0
@@ -95,7 +95,7 @@ class MainActivity : Activity(), PlaybackService.Listener {
     private lateinit var btnPlay: ImageButton
     private lateinit var btnShuffle: ImageButton
     private lateinit var btnRepeat: ImageButton
-    private lateinit var seek: SeekBar
+    private lateinit var seek: SeekPillBar
     private lateinit var list: ListView
     private lateinit var eq: EqView
     private lateinit var strip: HorizontalScrollView
@@ -112,6 +112,7 @@ class MainActivity : Activity(), PlaybackService.Listener {
     private var downX = 0f
     private var downY = 0f
     private var downInList = false
+    private var downInSeek = false
 
     // ---- striscia di miniature: finestra di al massimo 81 brani attorno a quello in esecuzione
     private var stripQueue: List<Track>? = null
@@ -150,8 +151,13 @@ class MainActivity : Activity(), PlaybackService.Listener {
             val s = svc
             if (s != null && !userSeeking) {
                 val p = s.positionMs
-                seek.progress = p
-                tvPos.text = fmt(p)
+                val settled = seekTarget < 0 || abs(p - seekTarget) < 1500 ||
+                    System.currentTimeMillis() - seekTargetAt > 1500
+                if (settled) {
+                    seekTarget = -1
+                    seek.progress = p
+                    tvPos.text = fmt(p)
+                }
             }
             ui.postDelayed(this, 500)
         }
@@ -240,16 +246,24 @@ class MainActivity : Activity(), PlaybackService.Listener {
 
         seek.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
             override fun onProgressChanged(sb: SeekBar?, p: Int, fromUser: Boolean) {
-                if (fromUser) tvPos.text = fmt(p)
+                // la nuova barra sposta l'avanzamento anche col solo tocco
+                if (fromUser || userSeeking) tvPos.text = fmt(p)
             }
 
-            override fun onStartTrackingTouch(sb: SeekBar?) { userSeeking = true }
-
-            override fun onStopTrackingTouch(sb: SeekBar?) {
-                userSeeking = false
-                svc?.seekTo(sb?.progress ?: 0)
-            }
+            override fun onStartTrackingTouch(sb: SeekBar?) { }
+            override fun onStopTrackingTouch(sb: SeekBar?) { }
         })
+
+        // gesto sulla barra: ferma l'aggiornamento, poi salta al punto toccato
+        seek.onTrackStart = { userSeeking = true }
+        seek.onTrackEnd = {
+            userSeeking = false
+            val p = seek.progress
+            seekTarget = p
+            seekTargetAt = System.currentTimeMillis()
+            tvPos.text = fmt(p)
+            svc?.seekTo(p)
+        }
 
         applyTheme()
 
@@ -302,8 +316,7 @@ class MainActivity : Activity(), PlaybackService.Listener {
             setColor(accent)
         }
         btnPlay.imageTintList = ColorStateList.valueOf(baseBg)
-        seek.progressDrawable = seekDrawable()
-        seek.thumbTintList = ColorStateList.valueOf(accent)
+        seek.accentColor = accent
         showList?.findViewById<ImageView>(R.id.ivHandle)?.imageTintList =
             ColorStateList.valueOf(accent)
         tabFolder.setTextColor(if (viewFavs) gray else accent)
@@ -312,23 +325,6 @@ class MainActivity : Activity(), PlaybackService.Listener {
         list.divider = ColorDrawable(
             Color.argb(45, Color.red(accent), Color.green(accent), Color.blue(accent))
         )
-    }
-
-    /** Barra di avanzamento ridisegnata col colore del tema. */
-    private fun seekDrawable(): Drawable {
-        val h = resources.getDimensionPixelSize(R.dimen.seek_thick)
-        val r = h / 2f
-        fun shape(color: Int) = GradientDrawable().apply {
-            shape = GradientDrawable.RECTANGLE
-            cornerRadius = r
-            setColor(color)
-            setSize(1, h)
-        }
-        val bar = ClipDrawable(shape(accent), Gravity.START, ClipDrawable.HORIZONTAL)
-        return LayerDrawable(arrayOf(shape(0xFF26324D.toInt()), bar)).apply {
-            setId(0, android.R.id.background)
-            setId(1, android.R.id.progress)
-        }
     }
 
     // ---------------------------------------------------------------- permessi e libreria
@@ -664,11 +660,13 @@ class MainActivity : Activity(), PlaybackService.Listener {
                     downX = ev.x
                     downY = ev.y
                     downInList = !listHidden && ev.x >= (rightCol?.left ?: 0)
+                    // il tocco sulla barra di avanzamento non deve chiudere la lista
+                    downInSeek = inside(seek, ev.x, ev.y)
                 }
                 MotionEvent.ACTION_UP -> {
                     val dx = ev.x - downX
                     val dy = ev.y - downY
-                    val swipe = abs(dx) > 60f * dp && abs(dx) > abs(dy) * 1.8f
+                    val swipe = !downInSeek && abs(dx) > 60f * dp && abs(dx) > abs(dy) * 1.8f
                     if (swipe) {
                         if (!listHidden && downInList) {
                             setListHidden(true)
@@ -677,7 +675,7 @@ class MainActivity : Activity(), PlaybackService.Listener {
                         ) {
                             setListHidden(false)
                         }
-                    } else if (!listHidden && !downInList &&
+                    } else if (!listHidden && !downInList && !downInSeek &&
                         abs(dx) < 14f * dp && abs(dy) < 14f * dp
                     ) {
                         // tocco fuori dal pannello della lista: la tendina si chiude
@@ -687,6 +685,15 @@ class MainActivity : Activity(), PlaybackService.Listener {
             }
         }
         return super.dispatchTouchEvent(ev)
+    }
+
+    /** Vero se il punto del tocco cade dentro la vista (con un piccolo margine). */
+    private fun inside(v: View, x: Float, y: Float): Boolean {
+        val p = IntArray(2)
+        v.getLocationInWindow(p)
+        val m = 6f * dp
+        return x >= p[0] - m && x <= p[0] + v.width + m &&
+            y >= p[1] - m && y <= p[1] + v.height + m
     }
 
     // ---------------------------------------------------------------- impostazioni

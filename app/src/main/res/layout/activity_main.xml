@@ -95,15 +95,12 @@
                         android:textColor="@color/gray"
                         android:textSize="@dimen/time_sp" />
 
-                    <SeekBar
+                    <!-- barra a tacca: tocco e trascinamento su tutta la lunghezza -->
+                    <com.carplayer.app.SeekPillBar
                         android:id="@+id/seek"
                         android:layout_width="0dp"
                         android:layout_height="@dimen/seek_h"
-                        android:layout_weight="1"
-                        android:progressDrawable="@drawable/seek_progress"
-                        android:thumb="@drawable/seek_thumb"
-                        android:thumbOffset="0dp"
-                        android:splitTrack="false" />
+                        android:layout_weight="1" />
 
                     <TextView
                         android:id="@+id/tvDur"
