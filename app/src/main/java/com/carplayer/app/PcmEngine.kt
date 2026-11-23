@@ -210,8 +210,7 @@ class PcmEngine(private val ctx: Context) : PlayerEngine {
         rate: Int,
         gen: Int
     ) {
-        val info = MediaCodec.BufferInfo()
-        var baseUs = startMs * 1000L
+                    val info = MediaCodec.BufferInfo()
         var inputDone = false
         var eos = false
         var appliedVol = vol
@@ -226,7 +225,6 @@ class PcmEngine(private val ctx: Context) : PlayerEngine {
                 try { at.flush() } catch (e: Exception) { }
                 codec.flush()
                 ex.seekTo(sk * 1000L, MediaExtractor.SEEK_TO_CLOSEST_SYNC)
-                baseUs = sk * 1000L
                 pos = sk
                 inputDone = false
                 eos = false
@@ -283,7 +281,9 @@ class PcmEngine(private val ctx: Context) : PlayerEngine {
                             }
                         }
                     }
-                    val p = ((info.presentationTimeUs - baseUs) / 1000L).toInt()
+                    // posizione assoluta nel brano: non relativa al punto di seek,
+                    // altrimenti la barra tornerebbe indietro dopo un salto
+                    val p = (info.presentationTimeUs / 1000L).toInt()
                     if (p >= 0) pos = p
                 }
                 codec.releaseOutputBuffer(outIdx, false)

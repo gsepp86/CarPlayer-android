@@ -151,8 +151,8 @@ class MainActivity : Activity(), PlaybackService.Listener {
             val s = svc
             if (s != null && !userSeeking) {
                 val p = s.positionMs
-                val settled = seekTarget < 0 || abs(p - seekTarget) < 1500 ||
-                    System.currentTimeMillis() - seekTargetAt > 1500
+                val settled = seekTarget < 0 || abs(p - seekTarget) < 2000 ||
+                    System.currentTimeMillis() - seekTargetAt > 3000
                 if (settled) {
                     seekTarget = -1
                     seek.progress = p
