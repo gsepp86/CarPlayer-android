@@ -1,6 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
-<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
+<!-- Brano in esecuzione nella striscia: bordo più marcato nel colore del tema -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
     <solid android:color="#243DDC97" />
-    <stroke android:width="2dp" android:color="@color/accent" />
-    <corners android:radius="12dp" />
+    <stroke android:width="3dp" android:color="@color/accent" />
+    <corners android:radius="14dp" />
 </shape>

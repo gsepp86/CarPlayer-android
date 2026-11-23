@@ -55,7 +55,7 @@
                 android:letterSpacing="0.1"
                 android:maxLines="1"
                 android:text="IN PAUSA"
-                android:textColor="@color/gray"
+                android:textColor="#FFFFFF"
                 android:textSize="@dimen/status_sp" />
         </LinearLayout>
 

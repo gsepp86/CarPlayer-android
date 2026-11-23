@@ -121,11 +121,27 @@
         <!-- Comandi fuori dallo scroll: il play resta sempre visibile sopra la striscia.
              Tirati leggermente verso l'alto, vicino alla barra di avanzamento. -->
         <LinearLayout
-            android:layout_width="match_parent"
+            android:layout_width="wrap_content"
             android:layout_height="wrap_content"
+            android:layout_gravity="center_horizontal"
             android:layout_marginTop="-16dp"
+            android:background="@drawable/bg_controls"
             android:gravity="center"
-            android:orientation="horizontal">
+            android:orientation="horizontal"
+            android:paddingStart="10dp"
+            android:paddingTop="4dp"
+            android:paddingEnd="10dp"
+            android:paddingBottom="4dp">
+
+            <ImageButton
+                android:id="@+id/btnHeart"
+                android:layout_width="@dimen/heart"
+                android:layout_height="@dimen/heart"
+                android:layout_marginHorizontal="@dimen/ctl_gap"
+                android:background="?android:attr/selectableItemBackgroundBorderless"
+                android:padding="@dimen/ico_pad"
+                android:scaleType="fitCenter"
+                android:src="@drawable/ic_heart" />
 
             <ImageButton
                 android:id="@+id/btnShuffle"
@@ -137,16 +153,6 @@
                 android:scaleType="fitCenter"
                 android:src="@drawable/ic_shuffle"
                 android:tint="#FFFFFF" />
-
-            <ImageButton
-                android:id="@+id/btnHeart"
-                android:layout_width="@dimen/heart"
-                android:layout_height="@dimen/heart"
-                android:layout_marginHorizontal="@dimen/ctl_gap"
-                android:background="?android:attr/selectableItemBackgroundBorderless"
-                android:padding="@dimen/ico_pad"
-                android:scaleType="fitCenter"
-                android:src="@drawable/ic_heart" />
 
             <ImageButton
                 android:id="@+id/btnPrev"

@@ -19,10 +19,10 @@
     <dimen name="play_pad">12dp</dimen>
     <dimen name="time_sp">11sp</dimen>
     <dimen name="time_w">40dp</dimen>
-    <dimen name="seek_h">22dp</dimen>
-    <dimen name="seek_thick">8dp</dimen>
-    <dimen name="strip_thumb">54dp</dimen>
-    <dimen name="strip_item">78dp</dimen>
+    <dimen name="seek_h">26dp</dimen>
+    <dimen name="seek_thick">12dp</dimen>
+    <dimen name="strip_thumb">60dp</dimen>
+    <dimen name="strip_item">88dp</dimen>
     <dimen name="strip_title_sp">12sp</dimen>
     <dimen name="tab_h">36dp</dimen>
     <dimen name="tab_sp">18sp</dimen>

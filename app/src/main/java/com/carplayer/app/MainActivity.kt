@@ -317,7 +317,7 @@ class MainActivity : Activity(), PlaybackService.Listener {
     /** Barra di avanzamento ridisegnata col colore del tema. */
     private fun seekDrawable(): Drawable {
         val h = resources.getDimensionPixelSize(R.dimen.seek_thick)
-        val r = 4f * dp
+        val r = h / 2f
         fun shape(color: Int) = GradientDrawable().apply {
             shape = GradientDrawable.RECTANGLE
             cornerRadius = r
@@ -325,7 +325,7 @@ class MainActivity : Activity(), PlaybackService.Listener {
             setSize(1, h)
         }
         val bar = ClipDrawable(shape(accent), Gravity.START, ClipDrawable.HORIZONTAL)
-        return LayerDrawable(arrayOf(shape(0xFF2A2F38.toInt()), bar)).apply {
+        return LayerDrawable(arrayOf(shape(0xFF26324D.toInt()), bar)).apply {
             setId(0, android.R.id.background)
             setId(1, android.R.id.progress)
         }
